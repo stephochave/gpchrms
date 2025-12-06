@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { date } from "zod";
+import { time } from "console";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -233,42 +235,9 @@ const AttendanceList = () => {
         const now = new Date();
         const currentHour = now.getHours();
 
-        // If it's past 5 PM, mark employees without attendance as absent
-        if (currentHour >= 17) {
-          const todayAttendance = attendanceRecords.filter(
-            (att: Attendance) => att.date === today
-          );
-          const attendedEmployeeIds = new Set(
-            todayAttendance.map((att: Attendance) => att.employeeId)
-          );
-
-          activeEmployees.forEach((emp: Employee) => {
-            if (!attendedEmployeeIds.has(emp.employeeId)) {
-              const existingAbsent = attendanceRecords.find(
-                (att: Attendance) =>
-                  att.employeeId === emp.employeeId &&
-                  att.date === today &&
-                  att.status === "absent"
-              );
-
-              if (!existingAbsent) {
-                attendanceRecords.push({
-                  id: `absent-${emp.employeeId}-${today}`,
-                  employeeId: emp.employeeId,
-                  employeeName: emp.fullName,
-                  date: today,
-                  checkIn: undefined,
-                  checkOut: undefined,
-                  status: "absent",
-                  notes: "Auto-marked absent - no attendance by 5 PM",
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                });
-              }
-            }
-          });
-        }
-
+        // Note: Auto-checkout at 7 PM is handled by the backend
+        // The backend will automatically update records every minute
+        
         setAttendance(attendanceRecords);
         setEmployees(activeEmployees);
         setUsingSampleData(false);
@@ -290,7 +259,7 @@ const AttendanceList = () => {
 
     fetchData();
 
-    // Refresh every 5 minutes to check for auto-absent (reduced from 1 minute to avoid rate limiting)
+    
     const interval = setInterval(fetchData, 300000); // 5 minutes
     return () => clearInterval(interval);
   }, [toast, usingSampleData]);

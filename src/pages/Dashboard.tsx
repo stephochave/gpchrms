@@ -110,42 +110,48 @@ const Dashboard = () => {
   // Generate calendar days properly aligned with days of week
   const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-  // const calendarDays: (number | null)[] = [];
+  const calendarDays: (number | null)[] = [];
   
-  const calendarDays = Array.from({ length: 35 }, (_, i) =>
-    i < 30 ? i + 1 : null
-  );
-  // Add empty cells for days before month starts
+
   for (let i = 0; i < firstDayOfMonth; i++) {
     calendarDays.push(null);
   }
-  
-  // Add days of the month
-  for (let i = 1; i <= daysInMonth; i++) {
-    calendarDays.push(i);
+
+  // 2. Month days
+  for (let d = 1; d <= daysInMonth; d++) {
+    calendarDays.push(d);
   }
-  
-  // Fill remaining cells to make a complete grid (35 cells for 5 weeks)
-  while (calendarDays.length < 35) {
+
+  // 3. Optional: pad end to complete 6×7 = 42-cell grid
+  while (calendarDays.length % 7 !== 0) {
     calendarDays.push(null);
   }
 
+  console.log(calendarDays);
+
   // Convert day number to actual date string (YYYY-MM-DD)
   const dayToDate = (day: number): string => {
-    const date = new Date(currentYear, currentMonth - 1, day);
-    return date.toISOString().split("T")[0];
+    const month = String(currentMonth).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    return `${currentYear}-${month}-${dayStr}`;
   };
-
+  
   // Convert date string to day number
   const dateToDay = (dateStr: string): number | null => {
-    const date = new Date(dateStr);
-    if (
-      date.getMonth() + 1 !== currentMonth ||
-      date.getFullYear() !== currentYear
-    ) {
-      return null; // Date is not in current month
+    try {
+      // Handle YYYY-MM-DD format
+      const parts = dateStr.split('T')[0].split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+      
+      if (month !== currentMonth || year !== currentYear) {
+        return null; // Date is not in current month
+      }
+      return day;
+    } catch {
+      return null;
     }
-    return date.getDate();
   };
 
   // Fetch calendar events for current month
@@ -425,7 +431,7 @@ const Dashboard = () => {
     setEventType("reminder");
     setEventTitle("");
     setEventDescription("");
-    setEventDate(dateStr);
+    setEventDate(dayToDate(day));
     setEventTime("");
     // Use setTimeout to ensure state updates are processed
     setTimeout(() => {
@@ -696,7 +702,7 @@ const Dashboard = () => {
 
           {/* Calendar and To Do List */}
           <div className="grid gap-3 md:grid-cols-2">
-            <Card className="h-[320px] flex flex-col overflow-hidden">
+            <Card className="flex flex-col overflow-hidden">
               <CardHeader className="pb-2 flex-shrink-0">
                 <CardTitle className="text-xl">
                   {new Date()
@@ -707,8 +713,8 @@ const Dashboard = () => {
                     .toUpperCase()}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div className="grid grid-cols-7 gap-1 mb-2 flex-shrink-0">
+              <CardContent className="pt-0 flex-1 flex flex-col min-h-0">
+                <div className="grid grid-cols-7 gap-1 mb-2">
                   {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
                     <div
                       key={i}
@@ -718,7 +724,8 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1 flex-1 min-h-0" style={{ gridTemplateRows: 'repeat(5, minmax(0, 1fr))' }}>
+                {/* <div className="grid grid-cols-7 gap-1 flex-1 min-h-0" style={{ gridTemplateRows: 'repeat(5, minmax(0, 1fr))' }}> */}
+                <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-[minmax(40px,1fr)]">
                   {calendarDays.map((day, index) => {
                     const dayEvents = day ? calendarEvents[day] || [] : [];
                     const hasEvents = dayEvents.length > 0;
@@ -731,7 +738,8 @@ const Dashboard = () => {
 
                     const DayContent = (
                       <div
-                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors overflow-hidden ${
+                        // className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors overflow-hidden ${
+                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors ${
                           day
                             ? "hover:bg-accent cursor-pointer active:bg-accent/80"
                             : "cursor-default text-transparent pointer-events-none"
@@ -752,7 +760,8 @@ const Dashboard = () => {
                           }
                         }}
                       >
-                        <span className="font-medium text-xs sm:text-sm truncate">{day ?? ""}</span>
+                        {/* <span className="font-medium text-xs sm:text-sm truncate">{day ?? ""}</span> */}
+                      <span className="font-medium">{day ?? ""}</span>
                         {day && hasEvents && (
                           <div className="mt-1 flex items-center gap-0.5">
                             {hasEventType && (
@@ -789,15 +798,17 @@ const Dashboard = () => {
                           <div className="space-y-3">
                             <div>
                               <h4 className="text-sm font-semibold mb-2">
-                                {new Date(dayToDate(day)).toLocaleDateString(
-                                  "en-US",
-                                  {
+                                {(() => {
+                                  const dateStr = dayToDate(day);
+                                  const [year, month, dayNum] = dateStr.split('-').map(Number);
+                                  const date = new Date(year, month - 1, dayNum);
+                                  return date.toLocaleDateString("en-US", {
                                     weekday: "long",
                                     month: "long",
                                     day: "numeric",
                                     year: "numeric",
-                                  }
-                                )}
+                                  });
+                                })()}
                               </h4>
                               <div className="space-y-2">
                                 {dayEvents.map((event, eventIndex) => (
@@ -854,7 +865,7 @@ const Dashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="h-[320px] flex flex-col">
+            <Card className="h-[400px] flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <div>
@@ -940,13 +951,16 @@ const Dashboard = () => {
               <DialogHeader>
                 <DialogTitle>
                   {selectedDay
-                    ? `Schedule for ${new Date(
-                        eventDate || dayToDate(selectedDay)
-                      ).toLocaleDateString("en-US", {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}`
+                    ? `Schedule for ${(() => {
+                        const dateStr = dayToDate(selectedDay);
+                        const [year, month, day] = dateStr.split('-').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        return date.toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        });
+                      })()}`
                     : "Schedule"}
                 </DialogTitle>
                 <DialogDescription>
@@ -1346,7 +1360,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="h-[320px] flex flex-col">
+          <Card className="h-[250px] flex flex-col">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div>
@@ -1431,13 +1445,16 @@ const Dashboard = () => {
             <DialogHeader>
               <DialogTitle>
                 {selectedDay
-                  ? `Schedule for ${new Date(
-                      eventDate || dayToDate(selectedDay)
-                    ).toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}`
+                  ? `Schedule for ${(() => {
+                      const dateStr = eventDate || dayToDate(selectedDay);
+                      const [year, month, day] = dateStr.split('-').map(Number);
+                      const date = new Date(year, month - 1, day);
+                      return date.toLocaleDateString("en-US", {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                    })()}`
                   : "Schedule"}
               </DialogTitle>
               <DialogDescription>

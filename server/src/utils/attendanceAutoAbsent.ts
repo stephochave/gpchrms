@@ -3,11 +3,13 @@ import { logActivity } from "./activityLogger";
 
 /**
  * Automatically mark employees as absent if they have no attendance record by 4:00 PM.
+ * Also auto-checkout employees at 7:00 PM if they haven't checked out yet.
  *
  * Logic:
  * - For today's date, find all active employees.
  * - For each active employee that does NOT have an attendance row for today,
- *   insert an `absent` attendance record.
+ *   insert an `absent` attendance record (after 4 PM).
+ * - For employees who checked in but haven't checked out, auto-checkout at 7 PM.
  */
 export const autoMarkAbsentForToday = async () => {
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -16,13 +18,58 @@ export const autoMarkAbsentForToday = async () => {
   const now = new Date();
   const hour = now.getHours();
 
-  // Safety: only run logic if it's already 16:00 (4 PM) or later
-  if (hour < 16) {
+  // Safety: only run logic if it's already 19:00 (7 PM) or later
+  if (hour < 19) {
     return;
   }
 
   try {
-    // Get all active employees with their basic info
+    // Step 1: Auto-checkout employees at 7 PM if they haven't checked out
+    if (hour >= 19) {
+      const [pendingCheckouts] = await pool.execute<any[]>(
+        `SELECT id, employee_id, employee_name, check_in, notes
+         FROM attendance
+         WHERE date = ?
+         AND check_in IS NOT NULL
+         AND check_out IS NULL
+         AND status IN ('present', 'late')`,
+        [today]
+      );
+
+      if (pendingCheckouts.length > 0) {
+        for (const record of pendingCheckouts) {
+          const updatedNotes = record.notes
+            ? `${record.notes} | Auto-checkout at 7 PM - no manual check-out recorded`
+            : "Auto-checkout at 7 PM - no manual check-out recorded";
+
+          await pool.execute(
+            `UPDATE attendance
+             SET check_out = '19:00',
+                 notes = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [updatedNotes, record.id]
+          );
+        }
+
+        // Log the auto-checkout activity
+        await logActivity({
+          userName: "System",
+          actionType: "UPDATE",
+          resourceType: "Attendance",
+          resourceId: null,
+          resourceName: `Auto-checkout for ${today}`,
+          description: `Automatically checked out ${pendingCheckouts.length} employee(s) at 7:00 PM.`,
+          status: "success",
+          metadata: {
+            date: today,
+            autoCheckoutCount: pendingCheckouts.length,
+          },
+        });
+      }
+    }
+
+    // Step 2: Get all active employees with their basic info
     const [employees] = await pool.execute<any[]>(
       `SELECT employee_id, full_name 
        FROM employees 
@@ -64,7 +111,7 @@ export const autoMarkAbsentForToday = async () => {
         emp.employee_id,
         emp.full_name || "",
         today,
-        "Auto-marked absent (no attendance recorded by 4:00 PM)"
+        "Auto-marked absent (no attendance recorded by 7:00 PM)"
       );
     }
 
