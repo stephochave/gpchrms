@@ -200,18 +200,32 @@ const AttendanceReport = () => {
 
   const reportData = useMemo(() => {
     // Filter attendance by date range if provided, otherwise show all
-    let allAttendance = attendance;
-    if (startDate && endDate) {
-      allAttendance = attendance.filter((att) => {
-        const attDate = new Date(att.date);
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        return attDate >= start && attDate <= end;
-      });
-    } else if (startDate) {
-      // If only start date is provided, show that single day
-      allAttendance = attendance.filter((att) => att.date === startDate);
-    }
+  let allAttendance = attendance;
+
+  const normalize = (d: string | Date) => {
+    const date = new Date(d);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  if (startDate && endDate) {
+    const start = normalize(startDate);
+    const end = normalize(endDate);
+
+    allAttendance = attendance.filter((att) => {
+      const attDate = normalize(att.date);
+      return attDate >= start && attDate <= end;
+    });
+
+  } else if (startDate) {
+    // Show only that specific day
+    const start = normalize(startDate);
+
+    allAttendance = attendance.filter((att) => {
+      const attDate = normalize(att.date);
+      return attDate.getTime() === start.getTime();
+    });
+  }
 
     const employeeMap = new Map(employees.map((emp) => [emp.employeeId, emp]));
 
