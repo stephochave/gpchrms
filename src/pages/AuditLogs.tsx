@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Download, Filter } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/fetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -44,7 +45,7 @@ const AuditLogs = () => {
         }
         params.append('limit', '100');
 
-        const response = await fetch(`${API_BASE_URL}/activity-logs?${params.toString()}`);
+        const response = await apiFetch(`${API_BASE_URL}/activity-logs?${params.toString()}`);
         if (!response.ok) {
           throw new Error('Failed to fetch audit logs');
         }

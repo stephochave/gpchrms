@@ -3,6 +3,7 @@ import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { apiFetch } from '@/lib/fetch';
 import {
   Table,
   TableBody,
@@ -27,7 +28,6 @@ import { Employee } from "@/types/employee";
 import { Department, Designation } from "@/lib/organizationStorage";
 import { Search, RotateCcw, Users, Plus } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { generateDocumentByTemplate } from "@/lib/documentTemplates";
 import {
   Select,
   SelectContent,
@@ -92,7 +92,6 @@ const InactiveEmployees = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null
   );
-  const [showViewDialog, setShowViewDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState(addInactiveDefault);
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
@@ -102,7 +101,7 @@ const InactiveEmployees = () => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/departments`);
+      const response = await apiFetch(`${API_BASE_URL}/departments`);
       if (!response.ok) {
         throw new Error("Failed to fetch departments");
       }
@@ -115,7 +114,7 @@ const InactiveEmployees = () => {
 
   const fetchDesignations = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/designations`);
+      const response = await apiFetch(`${API_BASE_URL}/designations`);
       if (!response.ok) {
         throw new Error("Failed to fetch designations");
       }
@@ -164,7 +163,7 @@ const InactiveEmployees = () => {
     try {
       setIsLoading(true);
       // Only fetch inactive employees
-      const response = await fetch(`${API_BASE_URL}/employees?status=inactive`);
+      const response = await apiFetch(`${API_BASE_URL}/employees?status=inactive`);
       if (!response.ok) {
         throw new Error("Failed to fetch inactive employees");
       }
@@ -209,7 +208,7 @@ const InactiveEmployees = () => {
       const inactiveDate =
         addForm.deactivationDate || new Date().toISOString().slice(0, 10);
 
-      const response = await fetch(`${API_BASE_URL}/employees`, {
+      const response = await apiFetch(`${API_BASE_URL}/employees`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -327,87 +326,6 @@ const InactiveEmployees = () => {
     fetchDepartments();
     fetchDesignations();
   }, []);
-
-  const viewDocument = async (type: "file201" | "pds" | "sr" | "coe") => {
-    if (!selectedEmployee) return;
-    if (type === "file201") {
-      // Generate HTML locally
-      const html = generateDocumentByTemplate("file201", selectedEmployee);
-      openHtmlInWindow(html, `201-file-${selectedEmployee.employeeId}`);
-      return;
-    }
-
-    try {
-      const resp = await fetch(
-        `${API_BASE_URL}/documents/file/${encodeURIComponent(
-          selectedEmployee.employeeId
-        )}/${type}`
-      );
-
-      if (!resp.ok) {
-        // fallback to generate template for pds/sr/coe
-        const key = type === "pds" ? "pds" : type === "sr" ? "serviceRecord" : "coe";
-        const html = generateDocumentByTemplate(key as any, selectedEmployee);
-        openHtmlInWindow(html, `${key}-${selectedEmployee.employeeId}`);
-        return;
-      }
-
-      const contentType = resp.headers.get("content-type") || "";
-      if (contentType.includes("text/html") || contentType.includes("text/plain")) {
-        const text = await resp.text();
-        openHtmlInWindow(text, `${type}-${selectedEmployee.employeeId}`);
-        return;
-      }
-
-      // For binary (pdf/image/etc), create object URL
-      const blob = await resp.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      // Open binary (PDF/image) in new tab which usually provides print/download controls
-      window.open(objectUrl, "_blank");
-    } catch (error) {
-      console.error("Error loading document", error);
-      // fallback generate
-      const key = type === "pds" ? "pds" : type === "sr" ? "serviceRecord" : "coe";
-      const html = generateDocumentByTemplate(key as any, selectedEmployee);
-      openHtmlInWindow(html, `${key}-${selectedEmployee.employeeId}`);
-    }
-  };
-
-  const openHtmlInWindow = (html: string, filename = "document") => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-
-    const toolbar = `
-      <div style="position:fixed;top:8px;right:8px;z-index:9999;display:flex;gap:8px;">
-        <button id="printBtn" style="padding:8px 12px;border-radius:6px;border:none;background:#0f172a;color:white;cursor:pointer;">Print</button>
-        <a id="downloadBtn" style="padding:8px 12px;border-radius:6px;border:none;background:#0f172a;color:white;text-decoration:none;display:inline-block;">Download</a>
-      </div>
-    `;
-
-    // Write content with a toolbar that enables printing and downloading
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${filename}</title></head><body>${toolbar}<div id="content">${html}</div><script>document.getElementById('printBtn').addEventListener('click',()=>{window.print();});</script></body></html>`);
-    win.document.close();
-
-    // For generated HTML, create a blob for download
-    try {
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const downloadEl = win.document.getElementById("downloadBtn") as HTMLAnchorElement | null;
-      if (downloadEl) {
-        downloadEl.href = url;
-        downloadEl.download = `${filename}.html`;
-      }
-      // Revoke URL when window is closed
-      const interval = setInterval(() => {
-        if (win.closed) {
-          URL.revokeObjectURL(url);
-          clearInterval(interval);
-        }
-      }, 1000);
-    } catch (e) {
-      // ignore
-    }
-  };
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -569,18 +487,16 @@ const InactiveEmployees = () => {
                         <TableCell>FORMER EMPLOYEE</TableCell>
                         <TableCell>
                           <div className="flex justify-center">
-                            <div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedEmployee(employee);
-                                  setShowViewDialog(true);
-                                }}
-                              >
-                                View
-                              </Button>
-                            </div>
+                            <Button
+                              size="sm"
+                              className="bg-primary hover:bg-primary/90 gap-2"
+                              onClick={() => {
+                                setSelectedEmployee(employee);
+                                setShowRestoreDialog(true);
+                              }}
+                            >
+                              Reactivate
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -626,7 +542,7 @@ const InactiveEmployees = () => {
                 <Input
                   value={addForm.firstName}
                   onChange={(e) =>
-                    setAddForm({ ...addForm, firstName: e.target.value.toUpperCase() })
+                    setAddForm({ ...addForm, firstName: e.target.value })
                   }
                   placeholder="Employee's First Name"
                 />
@@ -635,7 +551,7 @@ const InactiveEmployees = () => {
                 <Input
                   value={addForm.lastName}
                   onChange={(e) =>
-                    setAddForm({ ...addForm, lastName: e.target.value.toUpperCase() })
+                    setAddForm({ ...addForm, lastName: e.target.value })
                   }
                   placeholder="Employee's Last Name"
                 />
@@ -975,154 +891,9 @@ const InactiveEmployees = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* View Employee Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Employee Details</DialogTitle>
-            <DialogDescription>
-              View personal information and documents for {selectedEmployee?.fullName}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedEmployee && (
-            <div className="py-4 space-y-4 max-w-3xl">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Employee Name</p>
-                  <p className="font-medium">{selectedEmployee.fullName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Employee ID</p>
-                  <p className="font-medium">{selectedEmployee.employeeId}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Department</p>
-                  <p className="font-medium">{selectedEmployee.department}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Designation</p>
-                  <p className="font-medium">{selectedEmployee.position}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Date Hired</p>
-                  <p className="font-medium">
-                    {selectedEmployee.dateHired
-                      ? formatDate(selectedEmployee.dateHired)
-                      : "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Date Ended</p>
-                  <p className="font-medium">
-                    {selectedEmployee.dateOfLeaving
-                      ? formatDate(selectedEmployee.dateOfLeaving)
-                      : "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Deactivation</p>
-                  <p className="font-medium">
-                    {selectedEmployee.archivedDate
-                      ? formatDate(selectedEmployee.archivedDate)
-                      : "N/A"}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold">Documents</h3>
-                <p className="text-sm text-muted-foreground">
-                  Open or download employee documents.
-                </p>
-
-                  <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">201 File (Summary)</p>
-                      <p className="text-sm text-muted-foreground">Generated snapshot of the employee 201 file.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => viewDocument('file201')}>
-                        View
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Personal Data Sheet (PDS)</p>
-                      <p className="text-sm text-muted-foreground">Official personal data sheet.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => viewDocument('pds')}>
-                        View
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Service Record</p>
-                      <p className="text-sm text-muted-foreground">Uploaded service records for the employee.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => viewDocument('sr')}>
-                        View
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Certificate of Employment (COE)</p>
-                      <p className="text-sm text-muted-foreground">Certificate of employment (generated or uploaded).</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => viewDocument('coe')}>
-                        View
-                      </Button>
-                    </div>
-                  </div>
-                  {/* Preview removed: documents open in new window */}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <div className="w-full flex items-center justify-between">
-              <div>
-                <Button
-                  className="bg-primary hover:bg-primary/90 text-white gap-2"
-                  onClick={() => {
-                    // Open restore confirmation dialog from the view dialog
-                    setShowViewDialog(false);
-                    setShowRestoreDialog(true);
-                  }}
-                >
-                  Reactivate
-                </Button>
-              </div>
-
-              <div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowViewDialog(false);
-                    setSelectedEmployee(null);
-                  }}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </DashboardLayoutNew>
   );
 };
 
 export default InactiveEmployees;
+

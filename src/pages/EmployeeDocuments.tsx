@@ -3,6 +3,7 @@ import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { apiFetch } from '@/lib/fetch';
 import {
   Dialog,
   DialogContent,
@@ -143,7 +144,7 @@ const EmployeeDocuments = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/employees`);
+      const response = await apiFetch(`${API_BASE_URL}/employees`);
       if (!response.ok) {
         return null;
       }
@@ -181,7 +182,7 @@ const EmployeeDocuments = () => {
       toast({
         variant: "destructive",
         title: "Employee ID required",
-        description: "Please type an employee ID before viewing a document.",
+        description: "Please type an employee ID before generating a document.",
       });
       return;
     }
@@ -206,15 +207,15 @@ const EmployeeDocuments = () => {
       openDocumentWindow(html);
       toast({
         title: "Document ready",
-        description: `${templateLabel} prepared for ${employee.fullName}.`,
+        description: `${templateLabel} generated for ${employee.fullName}.`,
       });
     } catch (error) {
       console.error("Document generation failed", error);
       toast({
         variant: "destructive",
-        title: "View failed",
+        title: "Generation failed",
         description:
-          "Unable to prepare the selected document. Please try again.",
+          "Unable to generate the selected document. Please try again.",
       });
     } finally {
       setIsGeneratingDocument(false);
@@ -257,7 +258,7 @@ const EmployeeDocuments = () => {
       formData.append("documentType", documentType);
       formData.append("uploadedBy", "System"); // You can get from auth context
 
-      const response = await fetch(`${API_BASE_URL}/documents`, {
+      const response = await apiFetch(`${API_BASE_URL}/documents`, {
         method: "POST",
         body: formData,
       });
@@ -347,7 +348,7 @@ const EmployeeDocuments = () => {
 
       const API_BASE_URL =
         import.meta.env.VITE_API_URL || "http://localhost:4000";
-      const response = await fetch(`${API_BASE_URL}/documents`, {
+      const response = await apiFetch(`${API_BASE_URL}/documents`, {
         method: "POST",
         body: formData,
       });
@@ -577,7 +578,9 @@ const EmployeeDocuments = () => {
         <Card className="p-6 border-dashed border-primary/40 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold">View Employee Documents</h3>
+              <h3 className="text-lg font-semibold">
+                Generate Employee Documents
+              </h3>
               <p className="text-sm text-muted-foreground">
                 Type the employee ID then choose which template to merge
                 automatically.
@@ -622,7 +625,9 @@ const EmployeeDocuments = () => {
                       !generatorEmployeeId.trim() || isGeneratingDocument
                     }
                   >
-                    {isActive && isGeneratingDocument ? "Viewing…" : "View"}
+                    {isActive && isGeneratingDocument
+                      ? "Generating…"
+                      : "Generate"}
                   </Button>
                 </Card>
               );

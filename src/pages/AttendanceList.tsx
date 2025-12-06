@@ -7,6 +7,7 @@ import { CalendarDays, Search, Users, Download, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -208,8 +209,8 @@ const AttendanceList = () => {
       try {
         setIsLoading(true);
         const [attendanceRes, employeesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/attendance`),
-          fetch(`${API_BASE_URL}/employees?status=active`),
+          apiFetch(`${API_BASE_URL}/attendance`),
+          apiFetch(`${API_BASE_URL}/employees?status=active`),
         ]);
 
         if (!attendanceRes.ok || !employeesRes.ok) {
@@ -289,8 +290,8 @@ const AttendanceList = () => {
 
     fetchData();
 
-    // Refresh every minute to check for auto-absent
-    const interval = setInterval(fetchData, 60000);
+    // Refresh every 5 minutes to check for auto-absent (reduced from 1 minute to avoid rate limiting)
+    const interval = setInterval(fetchData, 300000); // 5 minutes
     return () => clearInterval(interval);
   }, [toast, usingSampleData]);
 

@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Department } from "@/lib/organizationStorage";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Pencil, Trash2, Database, ListChecks } from "lucide-react";
+import { apiFetch } from '@/lib/fetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -35,7 +36,7 @@ const DepartmentPage = () => {
   const fetchDepartments = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/departments`);
+      const response = await apiFetch(`${API_BASE_URL}/departments`);
       if (!response.ok) {
         throw new Error("Failed to fetch departments");
       }
@@ -120,7 +121,7 @@ const DepartmentPage = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/departments/${id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/departments/${id}`, {
         method: "DELETE",
       });
 
@@ -151,31 +152,6 @@ const DepartmentPage = () => {
   const filteredDepartments = departments.filter((dept) =>
     dept.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const handleViewEmployees = async (deptName: string) => {
-    try {
-      setLoadingEmployees(true);
-      setSelectedDepartmentName(deptName);
-      // Fetch only active employees then filter by department client-side
-      const resp = await fetch(`${API_BASE_URL}/employees?status=active`);
-      if (!resp.ok) throw new Error("Failed to fetch employees");
-      const data = await resp.json();
-      const employees = (data.data || []).filter(
-        (e: any) => String(e.department || "").toLowerCase() === deptName.toLowerCase()
-      );
-      setDeptEmployees(employees);
-      setShowEmployeesModal(true);
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Unable to load employees for this department.",
-      });
-    } finally {
-      setLoadingEmployees(false);
-    }
-  };
 
   return (
     <DashboardLayoutNew>
@@ -335,14 +311,6 @@ const DepartmentPage = () => {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleViewEmployees(dept.name)}
-                              className="h-9 gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                            >
-                              View
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
                               onClick={() => handleDelete(dept.id)}
                               className="h-9 gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
                             >
@@ -368,62 +336,6 @@ const DepartmentPage = () => {
             </div>
           </div>
         </Card>
-        {/* Employees Modal */}
-        <Dialog open={showEmployeesModal} onOpenChange={setShowEmployeesModal}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                Employees in {selectedDepartmentName}
-              </DialogTitle>
-              <DialogDescription>
-                {loadingEmployees
-                  ? "Loading employees..."
-                  : `${deptEmployees.length} active employee(s) found.`}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="mt-4">
-              {loadingEmployees ? (
-                <div className="py-6 text-center text-muted-foreground">
-                  Loading employees...
-                </div>
-              ) : deptEmployees.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-muted/50">
-                        <th className="text-left py-3 px-4 text-sm">#</th>
-                        <th className="text-left py-3 px-4 text-sm">Name</th>
-                        <th className="text-left py-3 px-4 text-sm">Designation</th>
-                        <th className="text-left py-3 px-4 text-sm">Employee ID</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {deptEmployees.map((e, i) => (
-                        <tr key={e.id || e.employeeId || i} className="border-t">
-                          <td className="py-3 px-4 text-sm">{i + 1}</td>
-                          <td className="py-3 px-4 text-sm">
-                            {`${e.firstName || ''} ${e.lastName || ''}`.trim() || '-'}
-                          </td>
-                          <td className="py-3 px-4 text-sm">{e.designation || '-'}</td>
-                          <td className="py-3 px-4 text-sm">{e.employeeId || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="py-6 text-center text-muted-foreground">
-                  No active employees in this department.
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <Button onClick={() => setShowEmployeesModal(false)}>Close</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayoutNew>
   );

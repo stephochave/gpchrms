@@ -15,6 +15,7 @@ import InactiveEmployees from "./pages/InactiveEmployees";
 import DepartmentPage from "./pages/Department";
 import DesignationPage from "./pages/Designation";
 import AttendanceList from "./pages/AttendanceList";
+import AttendanceHistory from "./pages/AttendanceHistory";
 import AddAttendance from "./pages/AddAttendance";
 import AttendanceReport from "./pages/AttendanceReport";
 import Leaves from "./pages/Leaves";
@@ -29,6 +30,8 @@ import NonRepudiation from "./pages/NonRepudiation";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import Index from "./pages/Index";
+import GuardDashboard from "./pages/GuardDashboard";
+import GenerateQRCodes from "./pages/GenerateQRCodes";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +67,22 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['employee']}>
                   <EmployeeDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/guard/dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['guard']}>
+                  <GuardDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/generate-qr-codes" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <GenerateQRCodes />
                 </ProtectedRoute>
               } 
             />
@@ -104,6 +123,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AttendanceList />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/attendance/history" 
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <AttendanceHistory />
                 </ProtectedRoute>
               } 
             />

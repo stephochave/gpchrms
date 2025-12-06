@@ -3,6 +3,7 @@ import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Folder, Edit, FileText, Download } from "lucide-react";
+import { apiFetch } from '@/lib/fetch';
 import {
   Dialog,
   DialogContent,
@@ -96,12 +97,15 @@ interface Document {
 
 const Documents = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [formerSearchTerm, setFormerSearchTerm] = useState("");
   const [selectedFolder, setSelectedFolder] = useState<SelectedFolder>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [activeModal, setActiveModal] = useState<DocumentNavKey | null>(null);
   const [modalForm, setModalForm] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [formerDocuments, setFormerDocuments] = useState<Document[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [formerEmployees, setFormerEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -128,13 +132,93 @@ const Documents = () => {
   const [activeTemplateKey, setActiveTemplateKey] =
     useState<DocumentTemplateKey | null>(null);
 
+  // Helper function to process employee documents
+  const processEmployeeDocuments = (employeesData: any[], documentsData: any[]) => {
+    const employeeMap = new Map(
+      employeesData.map((emp: any) => [emp.employeeId, emp])
+    );
+
+    const employeeDocs = new Map<string, Document>();
+
+    // First, add documents from employees table (pds_file, service_record_file)
+    employeesData.forEach((emp: any) => {
+      if (emp.employeeId && !employeeDocs.has(emp.employeeId)) {
+        employeeDocs.set(emp.employeeId, {
+          id: emp.employeeId,
+          name: emp.fullName || "",
+          employeeId: emp.employeeId,
+          pds: emp.pdsFile 
+            ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
+            : null,
+          sr: emp.serviceRecordFile
+            ? (emp.serviceRecordFile.startsWith('data:') ? emp.serviceRecordFile : `/uploads/${emp.serviceRecordFile}`)
+            : null,
+          coe: null,
+          date: emp.createdAt || new Date().toISOString(),
+        });
+      } else if (emp.employeeId) {
+        const empDoc = employeeDocs.get(emp.employeeId)!;
+        if (emp.pdsFile && !empDoc.pds) {
+          empDoc.pds = emp.pdsFile.startsWith('data:') 
+            ? emp.pdsFile 
+            : `/uploads/${emp.pdsFile}`;
+        }
+        if (emp.serviceRecordFile && !empDoc.sr) {
+          empDoc.sr = emp.serviceRecordFile.startsWith('data:')
+            ? emp.serviceRecordFile
+            : `/uploads/${emp.serviceRecordFile}`;
+        }
+      }
+    });
+
+    // Then, add/update with documents from documents table
+    documentsData.forEach((doc: any) => {
+      if (doc.employeeId && employeeMap.has(doc.employeeId)) {
+        if (!employeeDocs.has(doc.employeeId)) {
+          const employee = employeeMap.get(doc.employeeId);
+          employeeDocs.set(doc.employeeId, {
+            id: doc.employeeId,
+            name: employee?.fullName || "",
+            employeeId: doc.employeeId,
+            pds: null,
+            sr: null,
+            coe: null,
+            date: doc.createdAt || doc.uploadedAt,
+          });
+        }
+
+        const empDoc = employeeDocs.get(doc.employeeId)!;
+        const docType = doc.documentType?.toLowerCase() || "";
+        if (
+          docType === "pds" ||
+          doc.name.toLowerCase().includes("pds") ||
+          doc.name.toLowerCase().includes("personal data")
+        ) {
+          empDoc.pds = doc.fileUrl;
+        } else if (
+          docType === "sr" ||
+          doc.name.toLowerCase().includes("service")
+        ) {
+          empDoc.sr = doc.fileUrl;
+        } else if (
+          docType === "coe" ||
+          doc.name.toLowerCase().includes("certificate")
+        ) {
+          empDoc.coe = doc.fileUrl;
+        }
+      }
+    });
+
+    return Array.from(employeeDocs.values());
+  };
+
   // Helper function to fetch and process documents
   const fetchAndProcessDocuments = async () => {
     try {
-      const [documentsRes, employeesRes, allDocsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
-        fetch(`${API_BASE_URL}/employees?status=active`),
-        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
+      const [documentsRes, activeEmployeesRes, inactiveEmployeesRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/documents?type=employee-doc`),
+        apiFetch(`${API_BASE_URL}/employees?status=active`),
+        apiFetch(`${API_BASE_URL}/employees?status=inactive`),
       ]);
 
       if (!documentsRes.ok) {
@@ -142,93 +226,28 @@ const Documents = () => {
       }
 
       const documentsData = await documentsRes.json();
-      const allDocsData = await allDocsRes.json();
-      let employeesData: any[] = [];
+      let activeEmployeesData: any[] = [];
+      let inactiveEmployeesData: any[] = [];
 
-      if (employeesRes.ok) {
-        const empData = await employeesRes.json();
-        employeesData = empData.data || [];
-        setEmployees(employeesData);
+      if (activeEmployeesRes.ok) {
+        const empData = await activeEmployeesRes.json();
+        activeEmployeesData = empData.data || [];
+        setEmployees(activeEmployeesData);
       }
 
-      // Create employee map for names and files
-      const employeeMap = new Map(
-        employeesData.map((emp: any) => [emp.employeeId, emp])
-      );
+      if (inactiveEmployeesRes.ok) {
+        const empData = await inactiveEmployeesRes.json();
+        inactiveEmployeesData = empData.data || [];
+        setFormerEmployees(inactiveEmployeesData);
+      }
 
-      // Group documents by employee
-      const employeeDocs = new Map<string, Document>();
+      // Process active employee documents
+      const activeDocuments = processEmployeeDocuments(activeEmployeesData, documentsData.data || []);
+      setDocuments(activeDocuments);
 
-      // First, add documents from employees table (pds_file, service_record_file)
-      employeesData.forEach((emp: any) => {
-        if (emp.employeeId && !employeeDocs.has(emp.employeeId)) {
-          employeeDocs.set(emp.employeeId, {
-            id: emp.employeeId,
-            name: emp.fullName || "",
-            employeeId: emp.employeeId,
-            pds: emp.pdsFile 
-              ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
-              : null,
-            sr: emp.serviceRecordFile
-              ? (emp.serviceRecordFile.startsWith('data:') ? emp.serviceRecordFile : `/uploads/${emp.serviceRecordFile}`)
-              : null,
-            coe: null,
-            date: emp.createdAt || new Date().toISOString(),
-          });
-        } else if (emp.employeeId) {
-          const empDoc = employeeDocs.get(emp.employeeId)!;
-          if (emp.pdsFile && !empDoc.pds) {
-            empDoc.pds = emp.pdsFile.startsWith('data:') 
-              ? emp.pdsFile 
-              : `/uploads/${emp.pdsFile}`;
-          }
-          if (emp.serviceRecordFile && !empDoc.sr) {
-            empDoc.sr = emp.serviceRecordFile.startsWith('data:')
-              ? emp.serviceRecordFile
-              : `/uploads/${emp.serviceRecordFile}`;
-          }
-        }
-      });
-
-      // Then, add/update with documents from documents table
-      documentsData.data.forEach((doc: any) => {
-        if (doc.employeeId) {
-          if (!employeeDocs.has(doc.employeeId)) {
-            const employee = employeeMap.get(doc.employeeId);
-            employeeDocs.set(doc.employeeId, {
-              id: doc.employeeId,
-              name: employee?.fullName || "",
-              employeeId: doc.employeeId,
-              pds: null,
-              sr: null,
-              coe: null,
-              date: doc.createdAt || doc.uploadedAt,
-            });
-          }
-
-          const empDoc = employeeDocs.get(doc.employeeId)!;
-          const docType = doc.documentType?.toLowerCase() || "";
-          if (
-            docType === "pds" ||
-            doc.name.toLowerCase().includes("pds") ||
-            doc.name.toLowerCase().includes("personal data")
-          ) {
-            empDoc.pds = doc.fileUrl;
-          } else if (
-            docType === "sr" ||
-            doc.name.toLowerCase().includes("service")
-          ) {
-            empDoc.sr = doc.fileUrl;
-          } else if (
-            docType === "coe" ||
-            doc.name.toLowerCase().includes("certificate")
-          ) {
-            empDoc.coe = doc.fileUrl;
-          }
-        }
-      });
-
-      setDocuments(Array.from(employeeDocs.values()));
+      // Process inactive/former employee documents
+      const formerDocs = processEmployeeDocuments(inactiveEmployeesData, documentsData.data || []);
+      setFormerDocuments(formerDocs);
     } catch (error) {
       console.error("Error fetching documents", error);
       throw error;
@@ -315,7 +334,7 @@ const Documents = () => {
         formData.append("description", modalForm.documentDescription || "");
         formData.append("uploadedBy", user?.fullName || "System");
 
-        const response = await fetch(`${API_BASE_URL}/documents`, {
+        const response = await apiFetch(`${API_BASE_URL}/documents`, {
           method: "POST",
           body: formData,
         });
@@ -352,23 +371,176 @@ const Documents = () => {
       });
     }
   };
-  const filteredDocs = (() => {
-    const term = searchTerm.trim().toLowerCase();
+  const filteredDocs = documents.filter((doc) =>
+    [doc.name, doc.employeeId, doc.pds, doc.sr, doc.coe].some((value) =>
+      value?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
 
-    // If there's no search term, show all documents (restore viewing)
-    if (!term) return documents;
+  const filteredFormerDocs = formerDocuments.filter((doc) =>
+    [doc.name, doc.employeeId, doc.pds, doc.sr, doc.coe].some((value) =>
+      value?.toLowerCase().includes(formerSearchTerm.toLowerCase())
+    )
+  );
 
-    return documents.filter((doc) =>
-      [doc.name, doc.employeeId, doc.pds, doc.sr, doc.coe].some((value) =>
-        value?.toLowerCase().includes(term)
-      )
-    );
-  })();
+  // Validate document URL
+  const validateDocumentUrl = (url: string | null): boolean => {
+    if (!url) return false;
+    if (url === `${API_BASE_URL}/`) return false;
+    if (url === API_BASE_URL) return false;
+    if (url.trim() === '') return false;
+    return true;
+  };
 
   return (
     <DashboardLayoutNew>
       <div className="space-y-6">
-        
+        {/* Generate Employee Documents */}
+        <Card className="p-6 border-dashed border-primary/40 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold">
+                Generate Employee Documents
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Type the employee ID then choose which template to merge
+                automatically.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={generatorEmployeeId}
+                onChange={(event) =>
+                  setGeneratorEmployeeId(event.target.value.toUpperCase())
+                }
+                placeholder="25-GPC-12345"
+                className="w-full sm:w-64"
+              />
+              <Button
+                variant="outline"
+                onClick={() => setGeneratorEmployeeId("")}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                key: "pds" as DocumentTemplateKey,
+                label: "Personal Data Sheet",
+                description: "Auto-fill PDS template",
+              },
+              {
+                key: "file201" as DocumentTemplateKey,
+                label: "201 File Summary",
+                description: "Snapshot of employee records",
+              },
+              {
+                key: "serviceRecord" as DocumentTemplateKey,
+                label: "Service Record",
+                description: "Employment history overview",
+              },
+              {
+                key: "coe" as DocumentTemplateKey,
+                label: "Certificate of Employment",
+                description: "COE ready for printing",
+              },
+            ].map((template) => {
+              const isActive = activeTemplateKey === template.key;
+              return (
+                <Card
+                  key={template.key}
+                  className="p-4 flex flex-col gap-2 border border-border/70"
+                >
+                  <div>
+                    <h4 className="font-semibold">{template.label}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {template.description}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!generatorEmployeeId.trim()) {
+                        toast({
+                          variant: "destructive",
+                          title: "Employee ID required",
+                          description:
+                            "Please type an employee ID before generating a document.",
+                        });
+                        return;
+                      }
+                      setIsGeneratingDocument(true);
+                      setActiveTemplateKey(template.key);
+                      try {
+                        const response = await fetch(
+                          `${API_BASE_URL}/employees?employeeId=${generatorEmployeeId}`
+                        );
+                        if (!response.ok)
+                          throw new Error("Failed to fetch employee");
+                        const data = await response.json();
+                        const employee = data.data?.[0];
+                        if (!employee) {
+                          toast({
+                            variant: "destructive",
+                            title: "Employee not found",
+                            description: `No employee matched the ID ${generatorEmployeeId.trim()}.`,
+                          });
+                          return;
+                        }
+                        const html = generateDocumentByTemplate(
+                          template.key,
+                          employee
+                        );
+                        const docWindow = window.open("", "_blank");
+                        if (docWindow) {
+                          docWindow.document.write(html);
+                          docWindow.document.close();
+                          docWindow.focus();
+                          setTimeout(() => {
+                            try {
+                              docWindow.focus();
+                              docWindow.print();
+                            } catch (error) {
+                              console.error(
+                                "Unable to trigger print automatically",
+                                error
+                              );
+                            }
+                          }, 400);
+                        }
+                        toast({
+                          title: "Document ready",
+                          description: `${template.label} generated for ${employee.fullName}.`,
+                        });
+                      } catch (error) {
+                        console.error("Document generation failed", error);
+                        toast({
+                          variant: "destructive",
+                          title: "Generation failed",
+                          description:
+                            "Unable to generate the selected document. Please try again.",
+                        });
+                      } finally {
+                        setIsGeneratingDocument(false);
+                        setActiveTemplateKey(null);
+                      }
+                    }}
+                    disabled={
+                      !generatorEmployeeId.trim() || isGeneratingDocument
+                    }
+                  >
+                    {isActive && isGeneratingDocument
+                      ? "Generating…"
+                      : "Generate"}
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+        </Card>
 
         {/* <Card className="shadow-sm border-border">
           <CardHeader>
@@ -455,154 +627,13 @@ const Documents = () => {
           </CardContent>
         </Card> */}
 
-        <Card className="p-6 border-dashed border-primary/40 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold">View Employee Documents</h3>
-              <p className="text-sm text-muted-foreground">
-                Type the employee ID then choose which template to merge
-                automatically.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={generatorEmployeeId}
-                onChange={(event) =>
-                  setGeneratorEmployeeId(event.target.value.toUpperCase())
-                }
-                placeholder="25-GPC-12345"
-                className="w-full sm:w-64"
-              />
-              <Button
-                variant="outline"
-                onClick={() => setGeneratorEmployeeId("")}
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                key: "pds" as DocumentTemplateKey,
-                label: "Personal Data Sheet",
-                description: "Auto-fill PDS template",
-              },
-              {
-                key: "file201" as DocumentTemplateKey,
-                label: "201 File Summary",
-                description: "Snapshot of employee records",
-              },
-              {
-                key: "serviceRecord" as DocumentTemplateKey,
-                label: "Service Record",
-                description: "Employment history overview",
-              },
-              {
-                key: "coe" as DocumentTemplateKey,
-                label: "Certificate of Employment",
-                description: "COE ready for printing",
-              },
-            ].map((template) => {
-              const isActive = activeTemplateKey === template.key;
-              return (
-                <Card
-                  key={template.key}
-                  className="p-4 flex flex-col gap-2 border border-border/70"
-                >
-                  <div>
-                    <h4 className="font-semibold">{template.label}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {template.description}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={async () => {
-                        if (!generatorEmployeeId.trim()) {
-                        toast({
-                          variant: "destructive",
-                          title: "Employee ID required",
-                          description:
-                            "Please type an employee ID before viewing a document.",
-                        });
-                        return;
-                      }
-                      setIsGeneratingDocument(true);
-                      setActiveTemplateKey(template.key);
-                      try {
-                        const response = await fetch(
-                          `${API_BASE_URL}/employees?employeeId=${generatorEmployeeId}`
-                        );
-                        if (!response.ok)
-                          throw new Error("Failed to fetch employee");
-                        const data = await response.json();
-                        const employee = data.data?.[0];
-                        if (!employee) {
-                          toast({
-                            variant: "destructive",
-                            title: "Employee not found",
-                            description: `No employee matched the ID ${generatorEmployeeId.trim()}.`,
-                          });
-                          return;
-                        }
-                        const html = generateDocumentByTemplate(
-                          template.key,
-                          employee
-                        );
-                        const docWindow = window.open("", "_blank");
-                        if (docWindow) {
-                          docWindow.document.write(html);
-                          docWindow.document.close();
-                          docWindow.focus();
-                          setTimeout(() => {
-                            try {
-                              docWindow.focus();
-                              docWindow.print();
-                            } catch (error) {
-                              console.error(
-                                "Unable to trigger print automatically",
-                                error
-                              );
-                            }
-                          }, 400);
-                        }
-                        toast({
-                          title: "Document ready",
-                          description: `${template.label} prepared for ${employee.fullName}.`,
-                        });
-                      } catch (error) {
-                        console.error("Document generation failed", error);
-                        toast({
-                          variant: "destructive",
-                          title: "View failed",
-                          description:
-                            "Unable to prepare the selected document. Please try again.",
-                        });
-                      } finally {
-                        setIsGeneratingDocument(false);
-                        setActiveTemplateKey(null);
-                      }
-                    }}
-                    disabled={
-                      !generatorEmployeeId.trim() || isGeneratingDocument
-                    }
-                  >
-                    {isActive && isGeneratingDocument ? "Viewing…" : "View"}
-                  </Button>
-                </Card>
-              );
-            })}
-          </div>
-        </Card>
         <Card className="shadow-sm border-border">
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-xl">Documents</CardTitle>
+            <CardTitle className="text-xl">Active Employee Documents</CardTitle>
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search"
+                placeholder="Search active employees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 rounded-full"
@@ -648,7 +679,7 @@ const Documents = () => {
                         colSpan={6}
                         className="py-8 text-center text-muted-foreground"
                       >
-                        <span>No documents found</span>
+                        No documents found
                       </td>
                     </tr>
                   ) : (
@@ -669,15 +700,28 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.pds?.startsWith('data:');
+                                  if (!doc.pds || !validateDocumentUrl(doc.pds)) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available or invalid URL.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  const isBase64 = doc.pds.startsWith('data:');
                                   let fileUrl: string;
+                                  
                                   if (isBase64) {
-                                    // Base64 file - use it directly
+                                    fileUrl = doc.pds;
+                                  } else if (doc.pds.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.pds}`;
+                                  } else if (doc.pds.startsWith('http')) {
                                     fileUrl = doc.pds;
                                   } else {
-                                    // File path - use backend route to serve it
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
                                   }
+                                  
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Personal Data Sheet - ${doc.employeeId}`,
@@ -733,15 +777,28 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.sr?.startsWith('data:');
+                                  if (!doc.sr || !validateDocumentUrl(doc.sr)) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available or invalid URL.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  const isBase64 = doc.sr.startsWith('data:');
                                   let fileUrl: string;
+                                  
                                   if (isBase64) {
-                                    // Base64 file - use it directly
+                                    fileUrl = doc.sr;
+                                  } else if (doc.sr.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.sr}`;
+                                  } else if (doc.sr.startsWith('http')) {
                                     fileUrl = doc.sr;
                                   } else {
-                                    // File path - use backend route to serve it
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
                                   }
+                                  
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Service Record - ${doc.employeeId}`,
@@ -796,17 +853,51 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.coe?.startsWith('data:');
-                                  let fileUrl: string;
-                                  if (isBase64) {
-                                    // Base64 file - use it directly
-                                    fileUrl = doc.coe;
-                                  } else {
-                                    // File path - use backend route to serve it
-                                    fileUrl = doc.coe.startsWith('/') 
-                                      ? `${API_BASE_URL}${doc.coe}`
-                                      : `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  if (!doc.coe || !validateDocumentUrl(doc.coe)) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available or invalid URL.",
+                                    });
+                                    return;
                                   }
+                                  
+                                  const isBase64 = doc.coe.startsWith('data:');
+                                  let fileUrl: string;
+                                  
+                                  if (isBase64) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.coe.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.coe.startsWith('http')) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.coe.startsWith('/') && doc.employeeId) {
+                                    // Relative path - use backend route
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.employeeId) {
+                                    // File path - use backend route to serve it
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  } else {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  // Validate URL before setting
+                                  if (!fileUrl || fileUrl.trim() === '' || fileUrl === `${API_BASE_URL}/` || fileUrl === API_BASE_URL || fileUrl.endsWith('/')) {
+                                    console.error('Invalid fileUrl:', fileUrl);
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  console.log('Setting viewingDoc URL:', fileUrl, 'from doc.coe:', doc.coe);
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Certificate of Employment - ${doc.employeeId}`,
@@ -851,6 +942,198 @@ const Documents = () => {
                               <FileText className="h-3 w-3 mr-1" />
                               Upload
                             </Button>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {new Date(doc.date).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Former Employee Documents Section */}
+        <Card className="shadow-sm border-border">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-xl">Former Employee Documents</CardTitle>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search former employees..."
+                value={formerSearchTerm}
+                onChange={(e) => setFormerSearchTerm(e.target.value)}
+                className="pl-9 rounded-full"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-600 text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Employee Name
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Employee ID
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Personal Data Sheet
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Service Records
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Certificate of Employment
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        Loading documents...
+                      </td>
+                    </tr>
+                  ) : filteredFormerDocs.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        No former employee documents found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFormerDocs.map((doc, idx) => (
+                      <tr
+                        key={doc.id || idx}
+                        className={idx % 2 === 0 ? "bg-gray-100" : "bg-white"}
+                      >
+                        <td className="py-3 px-4 font-medium text-foreground">
+                          {doc.name || "N/A"}
+                        </td>
+                        <td className="py-3 px-4">{doc.employeeId || "N/A"}</td>
+                        <td className="py-3 px-4">
+                          {doc.pds ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.pds || !validateDocumentUrl(doc.pds)) return;
+                                  const isBase64 = doc.pds.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.pds;
+                                  } else if (doc.pds.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.pds}`;
+                                  } else if (doc.pds.startsWith('http')) {
+                                    fileUrl = doc.pds;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Personal Data Sheet - ${doc.employeeId}`,
+                                    type: "pds",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {doc.sr ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.sr || !validateDocumentUrl(doc.sr)) return;
+                                  const isBase64 = doc.sr.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.sr;
+                                  } else if (doc.sr.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.sr}`;
+                                  } else if (doc.sr.startsWith('http')) {
+                                    fileUrl = doc.sr;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Service Record - ${doc.employeeId}`,
+                                    type: "sr",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {doc.coe ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.coe || !validateDocumentUrl(doc.coe)) return;
+                                  const isBase64 = doc.coe.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.coe.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.coe.startsWith('http')) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Certificate of Employment - ${doc.employeeId}`,
+                                    type: "coe",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
@@ -1127,21 +1410,45 @@ const Documents = () => {
                             user?.fullName || "System"
                           );
 
-                          const response = await fetch(
-                            `${API_BASE_URL}/documents`,
-                            {
-                              method: "POST",
-                              body: formData,
+                          // Check if document exists in documents table
+                          let existingDocId: string | null = null;
+                          if (editingDoc.currentUrl) {
+                            try {
+                              const checkResponse = await fetch(
+                                `${API_BASE_URL}/documents?employeeId=${editingDoc.employeeId}&documentType=${editingDoc.type}&type=employee-doc`
+                              );
+                              if (checkResponse.ok) {
+                                const checkData = await checkResponse.json();
+                                if (checkData.data && checkData.data.length > 0) {
+                                  existingDocId = checkData.data[0].id;
+                                }
+                              }
+                            } catch (checkError) {
+                              console.error("Error checking existing document", checkError);
                             }
-                          );
+                          }
+
+                          // Use PUT if document exists, POST if it doesn't
+                          const method = existingDocId ? "PUT" : "POST";
+                          const url = existingDocId 
+                            ? `${API_BASE_URL}/documents/${existingDocId}`
+                            : `${API_BASE_URL}/documents`;
+
+                          const response = await fetch(url, {
+                            method: method,
+                            body: formData,
+                          });
 
                           if (!response.ok) {
-                            throw new Error("Failed to upload document");
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.message || "Failed to upload document");
                           }
 
                           toast({
                             title: "Success",
-                            description: "Document uploaded successfully",
+                            description: existingDocId 
+                              ? "Document replaced successfully" 
+                              : "Document uploaded successfully",
                           });
 
                           // Refresh documents
@@ -1157,7 +1464,9 @@ const Documents = () => {
                           variant: "destructive",
                           title: "Error",
                           description:
-                            "Failed to upload document. Please try again.",
+                            error instanceof Error 
+                              ? error.message 
+                              : "Failed to upload document. Please try again.",
                         });
                       }
                     }}
@@ -1179,8 +1488,8 @@ const Documents = () => {
                 View the document in the viewer below
               </DialogDescription>
             </DialogHeader>
-            {viewingDoc && (
-              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100">
+            {viewingDoc && viewingDoc.url && viewingDoc.url !== `${API_BASE_URL}/` && viewingDoc.url !== API_BASE_URL ? (
+              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100 relative">
                 {viewingDoc.isBase64 ? (
                   // Base64 file - embed directly to avoid CSP issues
                   <object
@@ -1189,30 +1498,84 @@ const Documents = () => {
                     className="w-full h-full"
                     aria-label={viewingDoc.title}
                   >
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-muted-foreground">
-                        PDF viewer not supported.{" "}
-                        <a
-                          href={viewingDoc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline"
-                        >
-                          Open in new tab
-                        </a>
+                    <div className="flex flex-col items-center justify-center h-full gap-4">
+                      <p className="text-muted-foreground text-center">
+                        PDF viewer not supported in this browser.
                       </p>
+                      <Button
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = viewingDoc.url;
+                          link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </Button>
                     </div>
                   </object>
                 ) : (
-                  // Server file - use iframe
-                  <iframe
-                    src={viewingDoc.url}
-                    className="w-full h-full border-0"
-                    title={viewingDoc.title}
-                  />
+                  // Server file - use iframe with error handling
+                  <>
+                    <iframe
+                      src={viewingDoc.url}
+                      className="w-full h-full border-0"
+                      title={viewingDoc.title}
+                      onError={() => {
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: "Failed to load document. Please try downloading instead.",
+                        });
+                      }}
+                      onLoad={(e) => {
+                        // Check if iframe loaded successfully
+                        try {
+                          const iframe = e.target as HTMLIFrameElement;
+                          // Log for debugging
+                          console.log('Document iframe loaded:', viewingDoc.url);
+                          if (iframe.contentWindow) {
+                            // Iframe loaded successfully
+                          }
+                        } catch (error) {
+                          // CORS error - show fallback
+                          console.warn('Iframe load check failed (likely CORS):', error);
+                        }
+                      }}
+                    />
+                    <div className="absolute bottom-4 right-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = viewingDoc.url;
+                          link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download if viewer fails
+                      </Button>
+                    </div>
+                  </>
                 )}
               </div>
-            )}
+            ) : viewingDoc ? (
+              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <p className="text-muted-foreground">Document URL is invalid or missing.</p>
+                  <p className="text-sm text-muted-foreground">Please contact administrator or try uploading the document again.</p>
+                </div>
+              </div>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"

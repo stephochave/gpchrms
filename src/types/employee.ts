@@ -26,6 +26,9 @@ export interface Employee {
   signatureFile?: string;
   pdsFile?: string;
   serviceRecordFile?: string;
+  qrCodeData?: string;
+  qrCodeSecret?: string;
+  qrCodeGeneratedAt?: string;
   file201?: string;
   registeredFaceFile?: string;
   status: 'active' | 'inactive';

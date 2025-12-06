@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/lib/fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Users,
@@ -74,9 +75,8 @@ const Dashboard = () => {
     navigate("/organization/department", { state: { openDialog: key } });
   };
 
-  const calendarDays = Array.from({ length: 35 }, (_, i) =>
-    i < 30 ? i + 1 : null
-  );
+
+
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [eventType, setEventType] = useState<CalendarEventType>("reminder");
@@ -106,6 +106,29 @@ const Dashboard = () => {
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1; // 1-12
   const currentYear = currentDate.getFullYear();
+
+  // Generate calendar days properly aligned with days of week
+  const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  // const calendarDays: (number | null)[] = [];
+  
+  const calendarDays = Array.from({ length: 35 }, (_, i) =>
+    i < 30 ? i + 1 : null
+  );
+  // Add empty cells for days before month starts
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    calendarDays.push(null);
+  }
+  
+  // Add days of the month
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(i);
+  }
+  
+  // Fill remaining cells to make a complete grid (35 cells for 5 weeks)
+  while (calendarDays.length < 35) {
+    calendarDays.push(null);
+  }
 
   // Convert day number to actual date string (YYYY-MM-DD)
   const dayToDate = (day: number): string => {
@@ -206,7 +229,7 @@ const Dashboard = () => {
   const fetchTodayAttendance = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(`${API_BASE_URL}/attendance?date=${today}`);
+      const response = await apiFetch(`${API_BASE_URL}/attendance?date=${today}`);
 
       if (!response.ok) {
         throw new Error("Failed to fetch attendance");
@@ -233,8 +256,27 @@ const Dashboard = () => {
       const late = attendance.filter(
         (att: any) => att.status === "late"
       ).length;
-      const absent = activeEmployeesCount - (present + late);
-
+      
+      // Only count absent if it's past 5 PM OR if status is already 'absent' in database
+      const now = new Date();
+      const currentHour = now.getHours();
+      const isPast5PM = currentHour >= 17;
+      
+      const explicitlyAbsent = attendance.filter(
+        (att: any) => att.status === "absent"
+      ).length;
+      
+      let absent = explicitlyAbsent;
+      
+      // If past 5 PM, count employees without attendance as absent
+      if (isPast5PM) {
+        const attendedEmployeeIds = new Set(
+          attendance.map((att: any) => att.employeeId)
+        );
+        const employeesWithoutAttendance = activeEmployeesCount - attendedEmployeeIds.size;
+        absent = explicitlyAbsent + employeesWithoutAttendance;
+      }
+      
       setAttendanceStats({
         present: Math.max(0, present),
         absent: Math.max(0, absent),
@@ -288,8 +330,8 @@ const Dashboard = () => {
     // Check immediately
     checkAndReset();
 
-    // Check every minute
-    const interval = setInterval(checkAndReset, 60000);
+    // Check every 5 minutes (reduced from 1 minute to avoid rate limiting)
+    const interval = setInterval(checkAndReset, 300000); // 5 minutes
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -400,7 +442,7 @@ const Dashboard = () => {
     try {
       setIsSavingEvent(true);
 
-      const response = await fetch(`${API_BASE_URL}/calendar-events`, {
+      const response = await apiFetch(`${API_BASE_URL}/calendar-events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -654,8 +696,8 @@ const Dashboard = () => {
 
           {/* Calendar and To Do List */}
           <div className="grid gap-3 md:grid-cols-2">
-            <Card className="h-[320px] flex flex-col">
-              <CardHeader className="pb-2">
+            <Card className="h-[320px] flex flex-col overflow-hidden">
+              <CardHeader className="pb-2 flex-shrink-0">
                 <CardTitle className="text-xl">
                   {new Date()
                     .toLocaleDateString("en-US", {
@@ -665,8 +707,8 @@ const Dashboard = () => {
                     .toUpperCase()}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 flex-1 flex flex-col">
-                <div className="grid grid-cols-7 gap-1 mb-2">
+              <CardContent className="pt-0 flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="grid grid-cols-7 gap-1 mb-2 flex-shrink-0">
                   {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
                     <div
                       key={i}
@@ -676,7 +718,7 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-[minmax(35px,1fr)]">
+                <div className="grid grid-cols-7 gap-1 flex-1 min-h-0" style={{ gridTemplateRows: 'repeat(5, minmax(0, 1fr))' }}>
                   {calendarDays.map((day, index) => {
                     const dayEvents = day ? calendarEvents[day] || [] : [];
                     const hasEvents = dayEvents.length > 0;
@@ -689,7 +731,7 @@ const Dashboard = () => {
 
                     const DayContent = (
                       <div
-                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors ${
+                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors overflow-hidden ${
                           day
                             ? "hover:bg-accent cursor-pointer active:bg-accent/80"
                             : "cursor-default text-transparent pointer-events-none"
@@ -710,7 +752,7 @@ const Dashboard = () => {
                           }
                         }}
                       >
-                        <span className="font-medium">{day ?? ""}</span>
+                        <span className="font-medium text-xs sm:text-sm truncate">{day ?? ""}</span>
                         {day && hasEvents && (
                           <div className="mt-1 flex items-center gap-0.5">
                             {hasEventType && (

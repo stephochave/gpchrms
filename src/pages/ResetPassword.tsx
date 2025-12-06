@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/fetch';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -67,7 +68,7 @@ const ResetPassword = () => {
     try {
       setIsSubmitting(true);
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const response = await apiFetch(`${API_BASE_URL}/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

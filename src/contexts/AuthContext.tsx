@@ -4,7 +4,7 @@ import { API_BASE_URL, getConnectionErrorMessage } from '@/lib/api';
 interface User {
   id: string;
   username: string;
-  role: 'admin' | 'employee';
+  role: 'admin' | 'employee' | 'guard';
   employeeId?: string | null;
   fullName: string;
   email?: string;
@@ -42,18 +42,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(() => getStoredUser());
   const [isLoading, setIsLoading] = useState(true);
 
+  // Verify user status on mount and periodically
   useEffect(() => {
-    if (user !== null) {
-      setIsLoading(false);
-      return;
-    }
+    const verifyUserStatus = async () => {
+      const storedUser = getStoredUser();
+      if (!storedUser || !storedUser.employeeId) {
+        setIsLoading(false);
+        return;
+      }
 
-    const storedUser = getStoredUser();
-    if (storedUser) {
+      try {
+        // Check if employee is still active
+        const response = await fetch(
+          `${API_BASE_URL}/employees?employeeId=${storedUser.employeeId}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const employee = data.data?.[0];
+          
+          // If employee is inactive, log them out
+          if (employee && employee.status === 'inactive') {
+            setUser(null);
+            localStorage.removeItem('hrms_user');
+            localStorage.removeItem('hrms_token');
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error verifying user status:', error);
+        // Continue with stored user if verification fails
+      }
+
       setUser(storedUser);
-    }
-    setIsLoading(false);
-  }, [user]);
+      setIsLoading(false);
+    };
+
+    verifyUserStatus();
+  }, []);
 
   const login = async (usernameOrEmailOrEmpId: string, password: string): Promise<AuthResponse> => {
     try {
@@ -61,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify({
           identifier: usernameOrEmailOrEmpId,

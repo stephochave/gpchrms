@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from '@/lib/fetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -31,7 +32,7 @@ const Settings = () => {
     const fetchSettings = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${API_BASE_URL}/settings`);
+        const response = await apiFetch(`${API_BASE_URL}/settings`);
         if (response.ok) {
           const data = await response.json();
           const settings = data.data || {};
@@ -71,7 +72,7 @@ const Settings = () => {
       formData.append("systemEmail", systemEmail);
       formData.append("address", address);
 
-      const response = await fetch(`${API_BASE_URL}/settings`, {
+      const response = await apiFetch(`${API_BASE_URL}/settings`, {
         method: "PUT",
         body: formData,
       });
@@ -86,7 +87,7 @@ const Settings = () => {
       });
 
       // Refresh settings to get updated logo URL
-      const refreshResponse = await fetch(`${API_BASE_URL}/settings`);
+      const refreshResponse = await apiFetch(`${API_BASE_URL}/settings`);
       if (refreshResponse.ok) {
         const data = await refreshResponse.json();
         const settings = data.data || {};

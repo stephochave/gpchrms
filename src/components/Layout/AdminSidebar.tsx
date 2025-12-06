@@ -18,6 +18,7 @@ import {
   Lock,
   Database,
   AlertTriangle,
+  QrCode,
 } from "lucide-react";
 import {
   Sidebar,
@@ -137,7 +138,8 @@ export function AdminSidebar() {
         id: "attendance",
         label: "Attendance",
         icon: Clock,
-        onClick: () => navigate("/attendance/list"),
+        // onClick: () => navigate("/attendance/list"),
+        onClick: () => navigate("/attendance/history"),
         active: location.pathname.startsWith("/attendance"),
       },
       {
@@ -266,6 +268,15 @@ export function AdminSidebar() {
                               className="text-sidebar-foreground/50"
                             >
                               <span>Inactive Employees</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              onClick={() => navigate("/generate-qr-codes")}
+                              isActive={isActive("/generate-qr-codes")}
+                            >
+                              <QrCode className="mr-2 h-4 w-4" />
+                              <span>Generate QR Codes</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         </SidebarMenuSub>
