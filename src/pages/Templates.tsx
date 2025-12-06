@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { FileText, Download, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/fetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -34,7 +35,7 @@ const Templates = () => {
     const fetchTemplates = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${API_BASE_URL}/documents?type=template`);
+        const response = await apiFetch(`${API_BASE_URL}/documents?type=template`);
         if (!response.ok) {
           throw new Error('Failed to fetch templates');
         }
@@ -62,7 +63,7 @@ const Templates = () => {
 
   const handleDownload = async (template: Template) => {
     try {
-      const response = await fetch(`${API_BASE_URL}${template.fileUrl}`);
+      const response = await apiFetch(`${API_BASE_URL}${template.fileUrl}`);
       if (!response.ok) {
         throw new Error('Failed to download file');
       }
@@ -112,7 +113,7 @@ const Templates = () => {
       formData.append('category', editCategory);
       formData.append('description', editDescription);
 
-      const response = await fetch(`${API_BASE_URL}/documents/${editingTemplate.id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/documents/${editingTemplate.id}`, {
         method: 'PUT',
         body: formData,
       });
@@ -130,7 +131,7 @@ const Templates = () => {
       setShowEditDialog(false);
       setEditingTemplate(null);
       // Refresh templates
-      const refreshResponse = await fetch(`${API_BASE_URL}/documents?type=template`);
+      const refreshResponse = await apiFetch(`${API_BASE_URL}/documents?type=template`);
       if (refreshResponse.ok) {
         const data = await refreshResponse.json();
         const templatesList: Template[] = data.data.map((doc: any) => ({
@@ -159,7 +160,7 @@ const Templates = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/documents/${template.id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/documents/${template.id}`, {
         method: 'DELETE',
       });
 
@@ -173,7 +174,7 @@ const Templates = () => {
       });
 
       // Refresh templates
-      const refreshResponse = await fetch(`${API_BASE_URL}/documents?type=template`);
+      const refreshResponse = await apiFetch(`${API_BASE_URL}/documents?type=template`);
       if (refreshResponse.ok) {
         const data = await refreshResponse.json();
         const templatesList: Template[] = data.data.map((doc: any) => ({

@@ -31,6 +31,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Info } from "lucide-react";
+import { apiFetch } from "@/lib/fetch";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -96,7 +97,7 @@ const Leaves = () => {
         ? `${API_BASE_URL}/leaves?${params.toString()}`
         : `${API_BASE_URL}/leaves`;
 
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
 
       if (!res.ok) throw new Error(data?.message || "Failed to load leaves");
@@ -172,7 +173,7 @@ const Leaves = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/leaves`, {
+      const res = await apiFetch(`${API_BASE_URL}/leaves`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -212,7 +213,7 @@ const Leaves = () => {
   const submitDecision = async () => {
     if (!decisionTarget || !user) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/leaves/${decisionTarget.id}/status`, {
+      const res = await apiFetch(`${API_BASE_URL}/leaves/${decisionTarget.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

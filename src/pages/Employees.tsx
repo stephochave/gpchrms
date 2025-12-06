@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/lib/fetch";
 import { Employee } from "@/types/employee";
 import { Department, Designation } from "@/lib/organizationStorage";
 import {
@@ -48,7 +49,6 @@ import {
   EyeOff,
   Users,
   Paperclip,
-  Camera,
   Trash2,
   X,
   KeyRound,
@@ -85,8 +85,6 @@ const editFormDefault = {
   pdsFileSize: "",
   serviceRecordFile: "",
   serviceRecordFileSize: "",
-  registeredFaceFile: "",
-  registeredFaceFileSize: "",
   status: "Active",
   password: "",
   posNumber: "",
@@ -198,12 +196,6 @@ const employeeSchema = z.object({
   dateOfJoining: z.string().min(1, "Date of joining is required"),
   employmentType: z.string().min(1, "Employment type is required"),
   password: z.string().trim().min(6, "Password must be at least 6 characters"),
-  registeredFaceFile: z
-    .string()
-    .min(
-      1,
-      "Face registration is required. Please capture face before adding employee."
-    ),
 });
 
 const initialFormState = {
@@ -232,7 +224,6 @@ const initialFormState = {
   signatureFile: null as File | null,
   pdsFile: null as File | null,
   serviceRecordFile: null as File | null,
-  registeredFaceFile: "",
   status: "Active",
   password: "",
 };
@@ -260,11 +251,6 @@ const Employees = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [cameraContext, setCameraContext] = useState<"add" | "edit">("add");
-  const [cameraError, setCameraError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
 
@@ -296,7 +282,6 @@ const Employees = () => {
     signatureFile: employee.signatureFile || "",
     pdsFile: employee.pdsFile || "",
     serviceRecordFile: employee.serviceRecordFile || "",
-    registeredFaceFile: employee.registeredFaceFile || "",
     status: employee.status,
     archivedReason: employee.archivedReason || undefined,
     archivedDate: employee.archivedAt || undefined,
@@ -305,10 +290,10 @@ const Employees = () => {
   });
 
   const fetchEmployees = async () => {
-    try {
+    try{
       setIsLoading(true);
       // Only fetch active employees for the Employees page
-      const response = await fetch(`${API_BASE_URL}/employees?status=active`);
+      const response = await apiFetch(`${API_BASE_URL}/employees?status=active`);
       if (!response.ok) {
         throw new Error("Failed to fetch employees");
       }
@@ -340,7 +325,7 @@ const Employees = () => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/departments`);
+      const response = await apiFetch(`${API_BASE_URL}/departments`);
       if (!response.ok) {
         throw new Error("Failed to fetch departments");
       }
@@ -360,7 +345,7 @@ const Employees = () => {
 
   const fetchDesignations = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/designations`);
+      const response = await apiFetch(`${API_BASE_URL}/designations`);
       if (!response.ok) {
         throw new Error("Failed to fetch designations");
       }
@@ -393,79 +378,6 @@ const Employees = () => {
     return matchesSearch && matchesDepartment;
   });
 
-  const stopCamera = useCallback(() => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, [stopCamera]);
-
-  const closeCamera = () => {
-    stopCamera();
-    setIsCameraOpen(false);
-    setCameraError("");
-  };
-
-  const openFaceCamera = async (context: "add" | "edit") => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast({
-        variant: "destructive",
-        title: "Camera not supported",
-        description: "Your browser does not allow camera access.",
-      });
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
-      });
-      mediaStreamRef.current = stream;
-      setCameraContext(context);
-      setIsCameraOpen(true);
-      setCameraError("");
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
-    } catch (error) {
-      console.error("Unable to open camera", error);
-      setCameraError("Unable to access camera. Please check permissions.");
-    }
-  };
-
-  const handleCaptureFace = () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/png");
-
-    if (cameraContext === "add") {
-      setFormData((prev) => ({ ...prev, registeredFaceFile: dataUrl }));
-    } else {
-      setEditForm((prev) => ({ ...prev, registeredFaceFile: dataUrl }));
-    }
-
-    toast({
-      title: "Face captured",
-      description: "Photo saved for this employee.",
-    });
-    closeCamera();
-  };
-
   const handleAddEmployee = async () => {
     try {
       setFormErrors({});
@@ -483,7 +395,7 @@ const Employees = () => {
         .replace(/\s+/g, " ")
         .trim();
 
-      const response = await fetch(`${API_BASE_URL}/employees`, {
+      const response = await apiFetch(`${API_BASE_URL}/employees`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -515,7 +427,6 @@ const Employees = () => {
           signatureFile: formData.signatureFile?.name || null,
           pdsFile: formData.pdsFile?.name || null,
           serviceRecordFile: formData.serviceRecordFile?.name || null,
-          registeredFaceFile: formData.registeredFaceFile || null,
           password: validated.password,
         }),
       });
@@ -561,7 +472,7 @@ const Employees = () => {
 
     // Fetch full employee data including password status
     try {
-      const response = await fetch(`${API_BASE_URL}/employees/${employee.id}`);
+      const response = await apiFetch(`${API_BASE_URL}/employees/${employee.id}`);
       if (response.ok) {
         const data = await response.json();
         const fullEmployee = data.data;
@@ -667,10 +578,6 @@ const Employees = () => {
     field: keyof typeof editFormDefault,
     value: string
   ) => {
-    // Auto-uppercase name fields
-    if (field === "firstName" || field === "middleName" || field === "lastName") {
-      value = value.toUpperCase();
-    }
     setEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -713,7 +620,6 @@ const Employees = () => {
           tinNumber: editForm.tinNumber || undefined,
           emergencyContact: editForm.emergencyContact || undefined,
           educationalBackground: editForm.educationalBackground || undefined,
-          registeredFaceFile: editForm.registeredFaceFile || undefined,
           password:
             editForm.password &&
             editForm.password !== "••••••••" &&
@@ -1145,7 +1051,7 @@ const Employees = () => {
                 <Input
                   value={formData.firstName}
                   onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value.toUpperCase() })
+                    setFormData({ ...formData, firstName: e.target.value })
                   }
                   placeholder="Employee's First Name"
                 />
@@ -1159,7 +1065,7 @@ const Employees = () => {
                 <Input
                   value={formData.middleName}
                   onChange={(e) =>
-                    setFormData({ ...formData, middleName: e.target.value.toUpperCase() })
+                    setFormData({ ...formData, middleName: e.target.value })
                   }
                   placeholder="Employee's Middle Name"
                 />
@@ -1173,7 +1079,7 @@ const Employees = () => {
                 <Input
                   value={formData.lastName}
                   onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value.toUpperCase() })
+                    setFormData({ ...formData, lastName: e.target.value })
                   }
                   placeholder="Employee's Last Name"
                 />
@@ -1485,46 +1391,6 @@ const Employees = () => {
                   }
                   placeholder="Employee's Background"
                 />
-              </EditField>
-              <EditField label="Register Face *">
-                <div className="space-y-2">
-                  {formData.registeredFaceFile ? (
-                    <div className="space-y-2">
-                      <img
-                        src={formData.registeredFaceFile}
-                        alt="Captured face"
-                        className="w-full h-40 object-cover rounded-xl border border-border/70"
-                      />
-                      <p className="text-xs text-green-600 font-medium">
-                        ✓ Face registered successfully
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="w-full h-40 border-2 border-dashed border-destructive/50 rounded-xl flex flex-col items-center justify-center text-sm text-muted-foreground bg-destructive/5">
-                      <Camera className="w-8 h-8 mb-2 text-destructive/50" />
-                      <p>No face captured yet</p>
-                      <p className="text-xs text-destructive mt-1">
-                        Face registration required
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => openFaceCamera("add")}
-                  >
-                    <Camera className="w-4 h-4 mr-2" />
-                    {formData.registeredFaceFile
-                      ? "Retake Photo"
-                      : "Open Camera"}
-                  </Button>
-                  {formErrors.registeredFaceFile && (
-                    <p className="text-sm text-destructive">
-                      {formErrors.registeredFaceFile}
-                    </p>
-                  )}
-                </div>
               </EditField>
             </section>
 
@@ -2006,27 +1872,6 @@ const Employees = () => {
                     )}
                   </div>
                 </EditField> */}
-                <EditField label="Registered Face" className="lg:col-span-2">
-                  <div className="space-y-3">
-                    {editForm.registeredFaceFile ? (
-                      <div className="space-y-2">
-                        <img
-                          src={editForm.registeredFaceFile}
-                          alt="Registered face"
-                          className="w-full max-w-md h-64 object-contain rounded-xl border-2 border-primary/20 shadow-md bg-muted/30"
-                        />
-                        <p className="text-xs text-green-600 font-medium">
-                          ✓ Face registered
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="w-full max-w-md h-48 border-2 border-dashed border-border/60 rounded-xl flex flex-col items-center justify-center text-sm text-muted-foreground bg-muted/30">
-                        <Camera className="w-8 h-8 mb-2 text-muted-foreground/50" />
-                        <p>No face capture on file</p>
-                      </div>
-                    )}
-                  </div>
-                </EditField>
                 <EditField label="Status">
                   <Select
                     value={editForm.status}
@@ -2259,57 +2104,6 @@ const Employees = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {isCameraOpen && (
-        <Dialog
-          open={isCameraOpen}
-          onOpenChange={(open) => !open && closeCamera}
-        >
-          <DialogContent className="max-w-2xl w-full p-0 gap-0">
-            <div className="p-6 pb-4">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
-                  <DialogTitle className="text-lg font-semibold">
-                    Capture Face
-                  </DialogTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {cameraContext === "add" ? "Add Employee" : "Edit Employee"}{" "}
-                    • Align the camera and tap capture.
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={closeCamera}
-                  className="h-8 w-8"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-
-              <div className="rounded-xl overflow-hidden bg-black aspect-video mb-4">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {cameraError && (
-                <p className="text-sm text-destructive mb-4">{cameraError}</p>
-              )}
-
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={closeCamera}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCaptureFace}>Capture</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </DashboardLayoutNew>
   );
 };

@@ -8,12 +8,15 @@ const Index = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <Navigate
-      to={user.role === 'admin' ? '/dashboard' : '/employee/dashboard'}
-      replace
-    />
-  );
+  // Redirect based on role
+  let dashboardPath = '/employee/dashboard';
+  if (user.role === 'admin') {
+    dashboardPath = '/dashboard';
+  } else if (user.role === 'guard') {
+    dashboardPath = '/guard/dashboard';
+  }
+
+  return <Navigate to={dashboardPath} replace />;
 };
 
 export default Index;

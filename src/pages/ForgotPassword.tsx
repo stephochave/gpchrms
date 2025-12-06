@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/fetch';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -24,7 +25,7 @@ const ForgotPassword = () => {
 
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const response = await apiFetch(`${API_BASE_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

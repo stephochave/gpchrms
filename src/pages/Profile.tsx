@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/fetch";
+import { QRCodeSVG } from 'qrcode.react';
 import {
   UserCircle,
   Mail,
@@ -54,6 +56,7 @@ const Profile = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [employeeData, setEmployeeData] = useState<any>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   const buildDocumentEmployee = (): EmployeeRecord => {
@@ -196,7 +199,7 @@ const Profile = () => {
       if (!user?.employeeId) return;
 
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees?employeeId=${user.employeeId}`
         );
         if (response.ok) {
@@ -261,7 +264,7 @@ const Profile = () => {
       const token =
         localStorage.getItem("hrms_token") || localStorage.getItem("token");
 
-      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      const response = await apiFetch(`${API_BASE_URL}/auth/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -406,18 +409,61 @@ const Profile = () => {
         {/* Profile Info Card */}
         <Card className="p-6">
           <div className="flex items-start gap-6 mb-6">
-            <Avatar className="w-24 h-24">
-              {employeeData?.registeredFaceFile ? (
-                <AvatarImage
-                  src={`${API_BASE_URL}/uploads/${employeeData.registeredFaceFile}`}
-                />
+            {/* QR Code Display */}
+            <div className="flex flex-col items-center gap-3">
+              {employeeData?.qrCodeData ? (
+                <>
+                  <div 
+                    className="bg-white p-4 rounded-lg border-2 border-primary cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => setShowQRModal(true)}
+                    title="Click to view fullscreen"
+                  >
+                    <QRCodeSVG
+                      id="employee-qr-code"
+                      value={employeeData.qrCodeData}
+                      size={150}
+                      level="H"
+                      includeMargin
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      const svg = document.getElementById('employee-qr-code');
+                      if (!svg) return;
+                      const svgData = new XMLSerializer().serializeToString(svg);
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d');
+                      const img = new Image();
+                      img.onload = () => {
+                        canvas.width = 300;
+                        canvas.height = 300;
+                        ctx?.drawImage(img, 0, 0, 300, 300);
+                        const pngFile = canvas.toDataURL('image/png');
+                        const downloadLink = document.createElement('a');
+                        downloadLink.download = `QR-${employeeData.employeeId}.png`;
+                        downloadLink.href = pngFile;
+                        downloadLink.click();
+                      };
+                      img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+                    }}
+                  >
+                    Download QR
+                  </Button>
+                </>
               ) : (
-                <AvatarImage src="" />
+                <div className="flex flex-col items-center gap-3">
+                  <Avatar className="w-24 h-24">
+                    <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
+                      {user?.fullName?.charAt(0) || "A"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <p className="text-sm text-muted-foreground">No QR Code</p>
+                </div>
               )}
-              <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                {user?.fullName?.charAt(0) || "A"}
-              </AvatarFallback>
-            </Avatar>
+            </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold mb-1">
                 {employeeData?.fullName || user?.fullName}
@@ -878,6 +924,60 @@ const Profile = () => {
           </div>
         </Card>
       </div>
+
+      {/* QR Code Modal */}
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Employee QR Code</DialogTitle>
+            <DialogDescription>
+              Scan this QR code for attendance
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 p-6">
+            <div className="bg-white p-6 rounded-lg">
+              {employeeData?.qrCodeData && (
+                <QRCodeSVG
+                  value={employeeData.qrCodeData}
+                  size={350}
+                  level="H"
+                  includeMargin
+                />
+              )}
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-semibold text-lg">{employeeData?.fullName}</p>
+              <p className="text-sm text-muted-foreground">ID: {employeeData?.employeeId}</p>
+              <p className="text-xs text-muted-foreground">{employeeData?.position}</p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                const svg = document.querySelector('.bg-white svg');
+                if (!svg) return;
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = () => {
+                  canvas.width = 400;
+                  canvas.height = 400;
+                  ctx?.drawImage(img, 0, 0, 400, 400);
+                  const pngFile = canvas.toDataURL('image/png');
+                  const downloadLink = document.createElement('a');
+                  downloadLink.download = `QR-${employeeData.employeeId}-${employeeData.fullName}.png`;
+                  downloadLink.href = pngFile;
+                  downloadLink.click();
+                };
+                img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+              }}
+            >
+              Download QR Code
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayoutNew>
   );
 };

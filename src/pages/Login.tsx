@@ -11,10 +11,12 @@ import logo from '../../images/logo.png';
 
 const Login = () => {
   const [employeeId, setEmployeeId] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({
     employeeId: '',
+    email: '',
     password: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -24,9 +26,35 @@ const Login = () => {
 
   const validateForm = () => {
     const newErrors = {
-      employeeId: employeeId.trim() ? '' : 'This field is required',
-      password: password.trim() ? '' : 'This field is required',
+      employeeId: '',
+      email: '',
+      password: '',
     };
+
+    // Validate Employee ID format if provided
+    if (employeeId.trim()) {
+      const employeeIdPattern = /^\d{2}-[A-Z]{2,4}-[A-Z0-9]{1,10}$/i;
+      if (!employeeIdPattern.test(employeeId.trim())) {
+        newErrors.employeeId = 'Invalid Employee ID format. Expected: YY-GPC-XXXXX (e.g., 25-GPC-00008 or 25-GPC-GRD01)';
+      }
+    } else {
+      newErrors.employeeId = 'This field is required';
+    }
+
+    // Validate email if provided
+    if (email.trim()) {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(email.trim())) {
+        newErrors.email = 'Invalid email format';
+      }
+    } else {
+      newErrors.email = 'This field is required';
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      newErrors.password = 'This field is required';
+    }
 
     setErrors(newErrors);
 
@@ -39,7 +67,7 @@ const Login = () => {
     if (!validateForm()) return;
 
     setSubmitting(true);
-    const result = await login(employeeId, password);
+    const result = await login(email || employeeId, password);
     setSubmitting(false);
 
     if (result.success) {
@@ -54,7 +82,14 @@ const Login = () => {
         return;
       }
       
-      const targetRoute = result.user?.role === 'admin' ? '/dashboard' : '/employee/dashboard';
+      // Route based on user role
+      let targetRoute = '/employee/dashboard';
+      if (result.user?.role === 'admin') {
+        targetRoute = '/dashboard';
+      } else if (result.user?.role === 'guard') {
+        targetRoute = '/guard/dashboard';
+      }
+      
       toast({
         title: "Login Successful",
         description: "Welcome to HRMS",
@@ -77,6 +112,7 @@ const Login = () => {
     const timer = setTimeout(() => {
       setErrors({
         employeeId: '',
+        email: '',
         password: '',
       });
     }, 5000);
@@ -88,7 +124,7 @@ const Login = () => {
     <div
       className="min-h-screen flex items-center justify-center p-4 lg:p-12"
       style={{
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url(${loginBg})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.44), rgba(0,0,0,0.33)), url(${loginBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -129,7 +165,30 @@ const Login = () => {
             )}
           </div>
 
-
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-foreground">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errors.email) {
+                  setErrors((prev) => ({ ...prev, email: '' }));
+                }
+              }}
+              className="bg-card/50"
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby="email-error"
+            />
+            {errors.email && (
+              <p id="email-error" className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {errors.email}
+              </p>
+            )}
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="password" className="text-foreground">Password</Label>

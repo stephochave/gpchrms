@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Designation } from "@/lib/organizationStorage";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Pencil, Trash2, Briefcase, ListChecks } from "lucide-react";
+import { apiFetch } from '@/lib/fetch';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -22,7 +23,7 @@ const DesignationPage = () => {
   const fetchDesignations = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/designations`);
+      const response = await apiFetch(`${API_BASE_URL}/designations`);
       if (!response.ok) {
         throw new Error("Failed to fetch designations");
       }
@@ -107,7 +108,7 @@ const DesignationPage = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/designations/${id}`, {
+      const response = await apiFetch(`${API_BASE_URL}/designations/${id}`, {
         method: "DELETE",
       });
 

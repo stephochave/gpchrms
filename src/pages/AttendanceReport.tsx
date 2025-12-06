@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from '@/lib/fetch';
 import {
   Dialog,
   DialogContent,
@@ -161,8 +162,8 @@ const AttendanceReport = () => {
     try {
       setIsLoading(true);
       const [attendanceRes, employeesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/attendance`),
-        fetch(`${API_BASE_URL}/employees?status=active`),
+        apiFetch(`${API_BASE_URL}/attendance`),
+        apiFetch(`${API_BASE_URL}/employees?status=active`),
       ]);
 
       const attendancePayload = attendanceRes.ok
@@ -759,3 +760,4 @@ const Field = ({
 );
 
 export default AttendanceReport;
+
