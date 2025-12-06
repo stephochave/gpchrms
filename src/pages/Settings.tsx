@@ -45,18 +45,45 @@ const Settings = () => {
           if (settings.address) setAddress(settings.address);
           if (settings.logoUrl)
             setLogoPreview(`${API_BASE_URL}${settings.logoUrl}`);
+        } else {
+          // Settings endpoint might not exist yet - just use defaults
+          console.log('Settings endpoint returned non-OK status, using defaults');
         }
       } catch (error) {
         console.error("Error fetching settings", error);
+        // Silently fail and use default values
+        toast({
+          title: "Note",
+          description: "Using default settings. You can update them below.",
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchSettings();
-  }, []);
+  }, [toast]);
 
   const handleSave = async () => {
+    // Validation
+    if (!siteTitle.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Site title is required.",
+      });
+      return;
+    }
+
+    if (!systemEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(systemEmail)) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter a valid email address.",
+      });
+      return;
+    }
+
     try {
       setIsSaving(true);
       const formData = new FormData();
@@ -65,12 +92,12 @@ const Settings = () => {
         formData.append("logo", logoFile);
       }
 
-      formData.append("siteTitle", siteTitle);
-      formData.append("description", description);
+      formData.append("siteTitle", siteTitle.trim());
+      formData.append("description", description.trim());
       formData.append("copyright", "");
-      formData.append("contactNumber", contactNumber);
-      formData.append("systemEmail", systemEmail);
-      formData.append("address", address);
+      formData.append("contactNumber", contactNumber.trim());
+      formData.append("systemEmail", systemEmail.trim());
+      formData.append("address", address.trim());
 
       const response = await apiFetch(`${API_BASE_URL}/settings`, {
         method: "PUT",
@@ -175,8 +202,13 @@ const Settings = () => {
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button variant="destructive" className="px-6 rounded-full">
-            Cancel
+          <Button 
+            variant="outline" 
+            className="px-6 rounded-full"
+            onClick={() => window.location.reload()}
+            disabled={isSaving || isLoading}
+          >
+            Reset
           </Button>
           <Button
             onClick={handleSave}

@@ -9,11 +9,28 @@ import fs from 'fs';
 
 const router = Router();
 
-// Configure multer for file uploads
+// Configure multer for file uploads with proper filename preservation
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/');
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename while preserving extension
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
 const upload = multer({
-  dest: path.join(__dirname, '../uploads/'), // Directory to store uploaded files
+  storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 100 * 1024 * 1024, // 100MB limit (increased from 100MB)
   },
   fileFilter: (req, file, cb) => {
     // Allow common document file types
@@ -187,23 +204,60 @@ router.post('/', upload.single('file'), async (req, res) => {
     // Generate file URL (in production, this would be a proper URL)
     const fileUrl = `/uploads/${req.file.filename}`;
 
-    const [result] = await pool.execute(
-      `INSERT INTO documents 
-        (name, type, category, file_path, file_url, file_size, employee_id, document_type, uploaded_by, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        type,
-        category || null,
-        req.file.path,
-        fileUrl,
-        req.file.size,
-        employeeId || null,
-        documentType || null,
-        uploadedBy,
-        description || null,
-      ]
-    );
+    console.log('Uploading document:', {
+      originalName: req.file.originalname,
+      savedFilename: req.file.filename,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      extension: path.extname(req.file.originalname)
+    });
+
+    // Try to insert with mime_type, fall back if column doesn't exist
+    let result;
+    try {
+      [result] = await pool.execute(
+        `INSERT INTO documents 
+          (name, type, category, file_path, file_url, file_size, employee_id, document_type, uploaded_by, description, mime_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          name,
+          type,
+          category || null,
+          req.file.path,
+          fileUrl,
+          req.file.size,
+          employeeId || null,
+          documentType || null,
+          uploadedBy,
+          description || null,
+          req.file.mimetype, // Store original MIME type
+        ]
+      );
+    } catch (error: any) {
+      if (error.code === 'ER_BAD_FIELD_ERROR') {
+        // mime_type column doesn't exist, insert without it
+        console.log('mime_type column not found, inserting without it');
+        [result] = await pool.execute(
+          `INSERT INTO documents 
+            (name, type, category, file_path, file_url, file_size, employee_id, document_type, uploaded_by, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            name,
+            type,
+            category || null,
+            req.file.path,
+            fileUrl,
+            req.file.size,
+            employeeId || null,
+            documentType || null,
+            uploadedBy,
+            description || null,
+          ]
+        );
+      } else {
+        throw error;
+      }
+    }
 
     const insertId = (result as any).insertId;
     const [rows] = await pool.execute<DbDocument[]>(
@@ -336,60 +390,136 @@ router.get('/file/:employeeId/:type', async (req, res) => {
     let fileData: string | null = null;
     let contentType = 'application/pdf';
     
-    // For COE, check documents table first
-    if (type === 'coe') {
+    console.log(`Serving file for employee ${employeeId}, type: ${type}`);
+    
+    let storedMimeType: string | null = null;
+    
+    // Check documents table first for all types
+    // Try with mime_type column, if it doesn't exist, fall back to without it
+    try {
       const [docRows] = await pool.execute<any[]>(
-        'SELECT file_url, file_path FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
-        [employeeId, 'coe']
+        'SELECT file_url, file_path, mime_type FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
+        [employeeId, type]
       );
       
       if (docRows.length > 0) {
         const doc = docRows[0];
         fileData = doc.file_url || doc.file_path;
+        storedMimeType = doc.mime_type;
+        // Use stored MIME type if available
+        if (storedMimeType) {
+          contentType = storedMimeType;
+          console.log(`Using stored MIME type: ${contentType}`);
+        }
+        console.log(`Found document in documents table:`, {
+          employee_id: employeeId,
+          type: type,
+          has_file_url: !!doc.file_url,
+          has_file_path: !!doc.file_path,
+          mime_type: storedMimeType,
+          file_data_preview: fileData ? fileData.substring(0, 100) : 'NULL'
+        });
       }
-    } else {
-      // For PDS and SR, check employees table
-      const [empRows] = await pool.execute<any[]>(
-        'SELECT pds_file, service_record_file, registered_face_file FROM employees WHERE employee_id = ?',
-        [employeeId]
-      );
-      
-      if (empRows.length === 0) {
-        return res.status(404).json({ message: 'Employee not found' });
-      }
-      
-      const employee = empRows[0];
-      
-      // Get the appropriate file based on type
-      if (type === 'pds') {
-        fileData = employee.pds_file;
-      } else if (type === 'sr') {
-        fileData = employee.service_record_file;
-      } else if (type === 'face') {
-        fileData = employee.registered_face_file;
-        contentType = 'image/png';
+    } catch (error: any) {
+      // If mime_type column doesn't exist, try without it
+      if (error.code === 'ER_BAD_FIELD_ERROR') {
+        console.log('mime_type column not found, querying without it');
+        const [docRows] = await pool.execute<any[]>(
+          'SELECT file_url, file_path FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
+          [employeeId, type]
+        );
+        
+        if (docRows.length > 0) {
+          const doc = docRows[0];
+          fileData = doc.file_url || doc.file_path;
+          console.log(`Found document in documents table (no mime_type):`, {
+            employee_id: employeeId,
+            type: type,
+            has_file_url: !!doc.file_url,
+            has_file_path: !!doc.file_path,
+            file_data_preview: fileData ? fileData.substring(0, 100) : 'NULL'
+          });
+        }
       } else {
-        return res.status(400).json({ message: 'Invalid document type' });
+        throw error;
       }
     }
     
-    if (!fileData) {
-      return res.status(404).json({ message: 'Document not found' });
+    // If not found in documents table, check employees table for legacy data
+    if (!fileData && (type === 'pds' || type === 'sr' || type === 'file_201')) {
+      const [empRows] = await pool.execute<any[]>(
+        'SELECT pds_file, pdsFile, service_record_file, serviceRecordFile, file_201 FROM employees WHERE employee_id = ?',
+        [employeeId]
+      );
+      
+      if (empRows.length > 0) {
+        const employee = empRows[0];
+        console.log(`Checking employees table for legacy data:`, {
+          employee_id: employeeId,
+          has_pds_file: !!employee.pds_file,
+          has_service_record_file: !!employee.service_record_file,
+          has_file_201: !!employee.file_201
+        });
+        
+        // Get the appropriate file based on type
+        if (type === 'pds') {
+          fileData = employee.pds_file || employee.pdsFile;
+        } else if (type === 'sr') {
+          fileData = employee.service_record_file || employee.serviceRecordFile;
+        } else if (type === 'file_201') {
+          fileData = employee.file_201;
+        }
+      }
     }
+    
+    // For COE, only check documents table (already done above)
+    if (type === 'coe' && !fileData) {
+      console.log(`COE not found in documents table for employee ${employeeId}`);
+    }
+    
+    if (!fileData) {
+      console.log(`No file data found for employee ${employeeId}, type ${type}`);
+      return res.status(404).json({ message: 'Document not found for this employee' });
+    }
+    
+    console.log(`File data found: ${fileData.substring(0, 50)}...`);
+    
+    // Determine content type from file extension if not already set
+    if (contentType === 'application/pdf') {
+      const ext = path.extname(fileData).toLowerCase();
+      if (ext === '.doc') {
+        contentType = 'application/msword';
+      } else if (ext === '.docx') {
+        contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (ext === '.pdf') {
+        contentType = 'application/pdf';
+      }
+    }
+    
+    console.log(`Final MIME type: ${contentType}`);
     
     // If it's a base64 string, decode and serve it
     if (fileData.startsWith('data:')) {
       const base64Match = fileData.match(/^data:([^;]+);base64,(.+)$/);
       if (base64Match) {
-        const mimeType = base64Match[1];
+        const detectedMimeType = base64Match[1];
         const base64Data = base64Match[2];
         const buffer = Buffer.from(base64Data, 'base64');
         
+        console.log(`Serving base64 file, MIME: ${detectedMimeType}, size: ${buffer.length} bytes`);
+        
+        // Determine file extension from MIME type
+        let fileExt = 'pdf';
+        if (detectedMimeType.includes('word') || detectedMimeType.includes('msword')) {
+          fileExt = detectedMimeType.includes('openxml') ? 'docx' : 'doc';
+        }
+        
         // Set headers to allow embedding and prevent CSP issues
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('Content-Disposition', `inline; filename="${type}_${employeeId}"`);
+        res.setHeader('Content-Type', detectedMimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${type}_${employeeId}.${fileExt}"`);
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
         res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        res.setHeader('Access-Control-Allow-Origin', '*');
         return res.send(buffer);
       }
     }
@@ -399,25 +529,71 @@ router.get('/file/:employeeId/:type', async (req, res) => {
       const filename = fileData.replace('/uploads/', '');
       const filePath = path.join(__dirname, '../uploads/', filename);
       
+      console.log(`Attempting to serve file from: ${filePath}`);
+      
       if (fs.existsSync(filePath)) {
-        // Set headers to allow embedding
+        console.log(`File exists, serving: ${filePath}`);
+        
+        // Use stored contentType, or detect from file extension
+        let finalMimeType = contentType;
+        if (finalMimeType === 'application/pdf') {
+          const ext = path.extname(filePath).toLowerCase();
+          if (ext === '.doc') {
+            finalMimeType = 'application/msword';
+          } else if (ext === '.docx') {
+            finalMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          }
+        }
+        
+        console.log(`File extension: ${path.extname(filePath)}, Final MIME type: ${finalMimeType}`);
+        
+        // Set Content-Disposition based on file type
+        // Only PDFs can be previewed inline, others should be attachment
+        const ext = path.extname(filePath).toLowerCase();
+        const disposition = ext === '.pdf' ? 'inline' : 'attachment';
+        
+        // Set headers to allow embedding and downloading
+        res.setHeader('Content-Type', finalMimeType);
+        res.setHeader('Content-Disposition', `${disposition}; filename="${path.basename(filePath)}"`);
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
         res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        res.setHeader('Access-Control-Allow-Origin', '*');
         return res.sendFile(filePath);
+      } else {
+        console.log(`File not found at: ${filePath}`);
       }
     }
     
     // If file_path is an absolute path, try to serve it directly
     if (fileData && fs.existsSync(fileData)) {
+      console.log(`Serving absolute path: ${fileData}`);
+      
+      // Detect MIME type from file extension
+      let detectedMimeType = 'application/pdf';
+      const ext = path.extname(fileData).toLowerCase();
+      if (ext === '.doc') {
+        detectedMimeType = 'application/msword';
+      } else if (ext === '.docx') {
+        detectedMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (ext === '.pdf') {
+        detectedMimeType = 'application/pdf';
+      }
+      
+      console.log(`File extension: ${ext}, MIME type: ${detectedMimeType}`);
+      
+      res.setHeader('Content-Type', detectedMimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(fileData)}"`);
       res.setHeader('X-Frame-Options', 'SAMEORIGIN');
       res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+      res.setHeader('Access-Control-Allow-Origin', '*');
       return res.sendFile(path.resolve(fileData));
     }
     
-    return res.status(404).json({ message: 'File not found' });
+    console.log(`File not found anywhere for: ${fileData}`);
+    return res.status(404).json({ message: 'File not found on server' });
   } catch (error) {
-    console.error('Error serving document file', error);
-    return res.status(500).json({ message: 'Error serving file' });
+    console.error('Error serving document file:', error);
+    return res.status(500).json({ message: 'Error serving file', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 

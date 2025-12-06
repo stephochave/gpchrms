@@ -27,3 +27,5 @@ package-lock.json
 *.md
 *.ps1
 ngrok.yml
+/server/src/uploads
+server/fix-database-schema.sql

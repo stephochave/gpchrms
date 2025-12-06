@@ -668,9 +668,12 @@ const Documents = () => {
                     <tr>
                       <td
                         colSpan={6}
-                        className="py-8 text-center text-muted-foreground"
+                        className="py-12 text-center text-muted-foreground"
                       >
-                        Loading documents...
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <span>Loading documents...</span>
+                        </div>
                       </td>
                     </tr>
                   ) : filteredDocs.length === 0 ? (
@@ -699,7 +702,7 @@ const Documents = () => {
                                 variant="ghost"
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (!doc.pds || !validateDocumentUrl(doc.pds)) {
                                     toast({
                                       variant: "destructive",
@@ -714,11 +717,9 @@ const Documents = () => {
                                   
                                   if (isBase64) {
                                     fileUrl = doc.pds;
-                                  } else if (doc.pds.startsWith('/uploads/')) {
-                                    fileUrl = `${API_BASE_URL}${doc.pds}`;
-                                  } else if (doc.pds.startsWith('http')) {
-                                    fileUrl = doc.pds;
                                   } else {
+                                    // Always use the backend route to serve the file
+                                    // This ensures proper headers and CORS handling
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
                                   }
                                   
@@ -1331,34 +1332,30 @@ const Documents = () => {
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-2"
-                      onClick={() => {
-                        if (editingDoc.currentUrl?.startsWith('data:')) {
-                          // Base64 file - use backend route to download
+                      onClick={async () => {
+                        try {
+                          // Always use backend route for proper file serving
                           const fileUrl = `${API_BASE_URL}/documents/file/${editingDoc.employeeId}/${editingDoc.type}`;
-                          const link = document.createElement('a');
-                          link.href = fileUrl;
-                          link.download = `${editingDoc.type}_${editingDoc.employeeId}.pdf`;
-                          link.target = '_blank';
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        } else {
-                          // File path - download from server
-                          const fileUrl = editingDoc.currentUrl.startsWith('/')
-                            ? `${API_BASE_URL}${editingDoc.currentUrl}`
-                            : `${API_BASE_URL}/uploads/${editingDoc.currentUrl}`;
-                          const link = document.createElement('a');
-                          link.href = fileUrl;
-                          link.download = `${editingDoc.type}_${editingDoc.employeeId}.pdf`;
-                          link.target = '_blank';
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
+                          
+                          // Open in new tab for download
+                          window.open(fileUrl, '_blank');
+                          
+                          toast({
+                            title: "Download started",
+                            description: "Opening document in new tab",
+                          });
+                        } catch (error) {
+                          console.error("Error downloading document", error);
+                          toast({
+                            variant: "destructive",
+                            title: "Error",
+                            description: "Failed to download document",
+                          });
                         }
                       }}
                     >
                       <Download className="h-4 w-4" />
-                      Download Current Document
+                      Download Current
                     </Button>
                   </div>
                 )}
@@ -1518,8 +1515,8 @@ const Documents = () => {
                       </Button>
                     </div>
                   </object>
-                ) : (
-                  // Server file - use iframe with error handling
+                ) : viewingDoc.url.toLowerCase().endsWith('.pdf') || viewingDoc.type === 'pdf' ? (
+                  // PDF file - use iframe for preview
                   <>
                     <iframe
                       src={viewingDoc.url}
@@ -1532,40 +1529,53 @@ const Documents = () => {
                           description: "Failed to load document. Please try downloading instead.",
                         });
                       }}
-                      onLoad={(e) => {
-                        // Check if iframe loaded successfully
-                        try {
-                          const iframe = e.target as HTMLIFrameElement;
-                          // Log for debugging
-                          console.log('Document iframe loaded:', viewingDoc.url);
-                          if (iframe.contentWindow) {
-                            // Iframe loaded successfully
-                          }
-                        } catch (error) {
-                          // CORS error - show fallback
-                          console.warn('Iframe load check failed (likely CORS):', error);
-                        }
-                      }}
                     />
                     <div className="absolute bottom-4 right-4">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          const link = document.createElement('a');
-                          link.href = viewingDoc.url;
-                          link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
-                          link.target = '_blank';
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
+                          window.open(viewingDoc.url, '_blank');
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Download if viewer fails
+                        Download
                       </Button>
                     </div>
                   </>
+                ) : (
+                  // Non-PDF file (DOC, DOCX, etc.) - use Google Docs Viewer for preview
+                  <div className="w-full h-full relative">
+                    <iframe
+                      src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewingDoc.url)}&embedded=true`}
+                      className="w-full h-full border-0"
+                      title={viewingDoc.title}
+                      onError={() => {
+                        toast({
+                          variant: "destructive",
+                          title: "Preview Failed",
+                          description: "Unable to preview this document. Please download it instead.",
+                        });
+                      }}
+                    />
+                    <div className="absolute bottom-4 right-4 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-white"
+                        onClick={() => {
+                          window.open(viewingDoc.url, '_blank');
+                          toast({
+                            title: "Download Started",
+                            description: "Your document is being downloaded.",
+                          });
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             ) : viewingDoc ? (

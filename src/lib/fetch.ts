@@ -8,9 +8,14 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
   // Add ngrok header to skip browser warning
   headers.set('ngrok-skip-browser-warning', 'true');
   
-  // Add content-type if not set and has body
-  if (options.body && !headers.has('Content-Type')) {
+  // Add content-type if not set and has body (but not for FormData)
+  if (options.body && !headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
+  }
+  
+  // Remove Content-Type for FormData to let browser set it with boundary
+  if (options.body instanceof FormData && headers.has('Content-Type')) {
+    headers.delete('Content-Type');
   }
   
   return fetch(url, {
