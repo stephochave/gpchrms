@@ -102,7 +102,9 @@ const mapEmployeeRow = (row: DbEmployee) => ({
   pdsFile: row.pds_file,
   serviceRecordFile: row.service_record_file,
   file201: row.file_201,
-  registeredFaceFile: row.registered_face_file,
+  qrCodeData: row.qr_code_data,
+  qrCodeSecret: row.qr_code_secret,
+  qrCodeGeneratedAt: row.qr_code_generated_at,
   status: row.status,
   archivedReason: row.archived_reason,
   archivedAt: row.archived_at,
@@ -135,7 +137,7 @@ router.get("/", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, registered_face_file, status,
+              service_record_file, file_201, qr_code_data, qr_code_secret, qr_code_generated_at, status,
               archived_reason, archived_at, created_at, updated_at
          FROM employees
          ${whereClause}
@@ -161,7 +163,7 @@ router.get("/:id", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, registered_face_file, status,
+              service_record_file, file_201, qr_code_data, qr_code_secret, qr_code_generated_at, status,
               archived_reason, archived_at, created_at, updated_at, password_hash
          FROM employees
          WHERE id = ?
@@ -269,8 +271,8 @@ router.post("/", async (req, res) => {
            date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
            employment_type, role, sss_number, pagibig_number, tin_number,
            emergency_contact, educational_background, signature_file, pds_file,
-           service_record_file, registered_face_file, password_hash, status, archived_reason, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           service_record_file, file_201, password_hash, status, archived_reason, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           employeeId,
           firstName,
@@ -298,7 +300,7 @@ router.post("/", async (req, res) => {
           signatureFile || null,
           pdsFile || null,
           serviceRecordFile || null,
-          sanitizedRegisteredFace,
+          null, // file_201
           hashedPassword,
           recordStatus,
           inactiveArchivedReason,
@@ -536,7 +538,6 @@ router.put("/:id", async (req, res) => {
                signature_file = COALESCE(?, signature_file),
                pds_file = COALESCE(?, pds_file),
                service_record_file = COALESCE(?, service_record_file),
-               registered_face_file = COALESCE(?, registered_face_file),
                password_hash = COALESCE(?, password_hash),
                status = COALESCE(?, status)
          WHERE id = ?`,
@@ -567,7 +568,6 @@ router.put("/:id", async (req, res) => {
           signatureFile ?? null,
           pdsFile ?? null,
           serviceRecordFile ?? null,
-          registeredFaceFile ?? null,
           hashedPassword ?? null,
           status ?? null,
           req.params.id,

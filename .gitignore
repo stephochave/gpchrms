@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 package-lock.json
 package-lock.json
+*.md
+*.sql
+*.ps1
+ngrok.yml
