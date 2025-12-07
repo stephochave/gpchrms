@@ -10,7 +10,7 @@ import { QRCodeSVG } from 'qrcode.react';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 interface Employee {
-  id: string;
+  id: number;
   employeeId: string;
   fullName: string;
   department: string;

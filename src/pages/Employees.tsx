@@ -501,8 +501,8 @@ const Employees = () => {
           pdsFileSize: employee.pdsFile ? "Uploaded" : "",
           serviceRecordFile: employee.serviceRecordFile || "",
           serviceRecordFileSize: employee.serviceRecordFile ? "Uploaded" : "",
-          registeredFaceFile: employee.registeredFaceFile || "",
-          registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
+          // registeredFaceFile: employee.registeredFaceFile || "",
+          // registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
           password: fullEmployee.password_hash ? "••••••••" : "", // Show placeholder if password exists
           deactivationDate: fullEmployee.deactivation_date || "",
           reactivationDate: fullEmployee.reactivation_date || "",
@@ -533,8 +533,8 @@ const Employees = () => {
           pdsFileSize: employee.pdsFile ? "Uploaded" : "",
           serviceRecordFile: employee.serviceRecordFile || "",
           serviceRecordFileSize: employee.serviceRecordFile ? "Uploaded" : "",
-          registeredFaceFile: employee.registeredFaceFile || "",
-          registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
+          // registeredFaceFile: employee.registeredFaceFile || "",
+          // registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
           password: "••••••••", // Assume password exists
         });
       }
@@ -565,8 +565,8 @@ const Employees = () => {
         pdsFileSize: employee.pdsFile ? "Uploaded" : "",
         serviceRecordFile: employee.serviceRecordFile || "",
         serviceRecordFileSize: employee.serviceRecordFile ? "Uploaded" : "",
-        registeredFaceFile: employee.registeredFaceFile || "",
-        registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
+        // registeredFaceFile: employee.registeredFaceFile || "",
+        // registeredFaceFileSize: employee.registeredFaceFile ? "Captured" : "",
         password: "••••••••",
       });
     }

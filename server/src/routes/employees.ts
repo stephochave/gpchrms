@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "../db";
 import { DbEmployee } from "../types";
 import { logActivity, getClientIp } from "../utils/activityLogger";
+import { generateEmployeeQRCode } from "../utils/qrCodeGenerator";
 
 const router = Router();
 
@@ -57,12 +58,7 @@ const employeeSchema = z.object({
   signatureFile: z.string().optional().nullable(),
   pdsFile: z.string().optional().nullable(),
   serviceRecordFile: z.string().optional().nullable(),
-  registeredFaceFile: z
-    .string()
-    .min(
-      1,
-      "Registered face capture is required. Please capture employee face before saving."
-    ),
+  registeredFaceFile: z.string().optional().nullable(),
   password: z.string().trim().min(6, "Password must be at least 6 characters"),
   status: z.enum(["active", "inactive"]).optional(),
   archivedReason: z.string().optional().nullable(),
@@ -137,7 +133,7 @@ router.get("/", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, qr_code_data, qr_code_secret, qr_code_generated_at, status,
+              service_record_file, qr_code_data, qr_code_secret, qr_code_generated_at, status,
               archived_reason, archived_at, created_at, updated_at
          FROM employees
          ${whereClause}
@@ -163,7 +159,7 @@ router.get("/:id", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, qr_code_data, qr_code_secret, qr_code_generated_at, status,
+              service_record_file, qr_code_data, qr_code_secret, qr_code_generated_at, status,
               archived_reason, archived_at, created_at, updated_at, password_hash
          FROM employees
          WHERE id = ?
@@ -235,7 +231,7 @@ router.post("/", async (req, res) => {
 
   const sanitizedMiddleName = middleName?.trim() || "N/A";
   const sanitizedSuffixName = suffixName?.trim() || "";
-  const sanitizedRegisteredFace = registeredFaceFile.trim();
+  const sanitizedRegisteredFace = registeredFaceFile?.trim() || null;
 
   const normalizedFullName =
     fullName?.trim() ||
@@ -265,14 +261,18 @@ router.post("/", async (req, res) => {
             : new Date()
           : null;
 
+      // Generate QR code for the employee
+      const qrCode = await generateEmployeeQRCode(employeeId, normalizedFullName);
+
       const [result] = await connection.execute(
         `INSERT INTO employees
           (employee_id, first_name, middle_name, last_name, suffix_name, full_name, department, position, email, phone,
            date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
            employment_type, role, sss_number, pagibig_number, tin_number,
            emergency_contact, educational_background, signature_file, pds_file,
-           service_record_file, file_201, password_hash, status, archived_reason, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           service_record_file, password_hash, status, archived_reason, archived_at,
+           qr_code_data, qr_code_secret, qr_code_generated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           employeeId,
           firstName,
@@ -300,11 +300,13 @@ router.post("/", async (req, res) => {
           signatureFile || null,
           pdsFile || null,
           serviceRecordFile || null,
-          null, // file_201
           hashedPassword,
           recordStatus,
           inactiveArchivedReason,
           inactiveArchivedAt,
+          qrCode.token,
+          qrCode.secret,
+          qrCode.expiresAt,
         ]
       );
 
@@ -935,6 +937,74 @@ router.post("/:id/upload-document", async (req, res) => {
     return res
       .status(500)
       .json({ message: "Unexpected error while uploading document" });
+  }
+});
+
+// Generate QR Code for Employee
+router.post("/:id/generate-qr", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { generatedBy } = req.body;
+
+    // Fetch employee details
+    const [employees] = await pool.execute<any[]>(
+      `SELECT id, employee_id, full_name, qr_code_secret 
+       FROM employees 
+       WHERE id = ? AND status = 'active'`,
+      [id]
+    );
+
+    if (employees.length === 0) {
+      return res.status(404).json({ message: "Active employee not found" });
+    }
+
+    const employee = employees[0];
+
+    // Generate QR code (regenerate if exists, using existing secret if available)
+    const qrCode = await generateEmployeeQRCode(
+      employee.employee_id,
+      employee.full_name,
+      employee.qr_code_secret || undefined
+    );
+
+    // Update employee with QR code data
+    await pool.execute(
+      `UPDATE employees 
+       SET qr_code_data = ?, 
+           qr_code_secret = ?, 
+           qr_code_generated_at = ?,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+      [qrCode.token, qrCode.secret, qrCode.expiresAt, id]
+    );
+
+    await logActivity({
+      userName: generatedBy || "System",
+      actionType: "UPDATE",
+      resourceType: "Employee",
+      resourceId: String(employee.id),
+      resourceName: employee.full_name,
+      description: `Generated QR code for ${employee.full_name} (${employee.employee_id})`,
+      ipAddress: getClientIp(req),
+      status: "success",
+      metadata: { employeeId: employee.employee_id, action: "qr_generation" },
+    });
+
+    return res.json({
+      message: "QR code generated successfully",
+      data: {
+        employeeId: employee.employee_id,
+        fullName: employee.full_name,
+        qrCodeData: qrCode.token,
+        expiresAt: qrCode.expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    return res.status(500).json({ 
+      message: "Failed to generate QR code",
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 

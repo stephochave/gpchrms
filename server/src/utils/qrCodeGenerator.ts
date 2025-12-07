@@ -99,7 +99,7 @@ export function verifyQRToken(
  * @param employeeId - Unique employee identifier
  * @param employeeName - Employee full name
  * @param existingSecret - Optional existing secret (for regeneration)
- * @returns Object with token, secret, and expiration
+ * @returns Object with token, secret, expiration, dataURL, and employeeName
  */
 export async function generateEmployeeQRCode(
   employeeId: string,
@@ -109,12 +109,17 @@ export async function generateEmployeeQRCode(
   token: string;
   secret: string;
   expiresAt: Date;
+  dataURL: string;
+  employeeName: string;
 }> {
   // Use existing secret or generate new one
   const secret = existingSecret || generateQRSecret();
 
   // Generate JWT token
   const token = generateQRToken(employeeId, employeeName, secret);
+
+  // Generate QR code image
+  const dataURL = await generateQRCodeDataURL(token);
 
   // Calculate expiration date
   const decoded = jwt.decode(token) as QRCodePayload;
@@ -124,6 +129,8 @@ export async function generateEmployeeQRCode(
     token,
     secret,
     expiresAt,
+    dataURL,
+    employeeName,
   };
 }
 
