@@ -123,7 +123,11 @@ const EmployeeDashboard = () => {
     if (!user?.employeeId) return;
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const nowPH = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+      const today = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila"
+      }).format(new Date());
+      
       const response = await apiFetch(
         `${API_BASE_URL}/attendance?employeeId=${user.employeeId}&date=${today}`
       );
