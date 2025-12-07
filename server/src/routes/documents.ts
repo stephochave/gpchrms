@@ -661,5 +661,95 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// DELETE document by employee ID and document type
+router.delete('/employee/:employeeId/:documentType', async (req, res) => {
+  try {
+    const { employeeId, documentType } = req.params;
+
+    // Map document type to database column
+    const columnMap: Record<string, string> = {
+      pds: 'pds_file',
+      sr: 'service_record_file',
+      coe: 'file_201',
+      '201': 'file_201',
+    };
+
+    const column = columnMap[documentType.toLowerCase()];
+    
+    if (!column) {
+      return res.status(400).json({ message: 'Invalid document type' });
+    }
+
+    // Get employee info
+    const [employees] = await pool.execute<any[]>(
+      `SELECT id, employee_id, full_name, ${column} FROM employees WHERE employee_id = ?`,
+      [employeeId]
+    );
+
+    if (employees.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    const employee = employees[0];
+    let documentDeleted = false;
+
+    // Clear the document column in employees table if it has a value
+    if (employee[column]) {
+      await pool.execute(
+        `UPDATE employees SET ${column} = NULL, updated_at = CURRENT_TIMESTAMP WHERE employee_id = ?`,
+        [employeeId]
+      );
+      documentDeleted = true;
+    }
+
+    // Also try to delete from documents table
+    try {
+      const [deleteResult] = await pool.execute(
+        'DELETE FROM documents WHERE employee_id = ? AND document_type = ?',
+        [employeeId, documentType.toLowerCase()]
+      );
+      const affectedRows = (deleteResult as any).affectedRows;
+      if (affectedRows > 0) {
+        documentDeleted = true;
+      }
+    } catch (docError) {
+      console.log('Error deleting from documents table:', docError);
+    }
+
+    // If no document was found in either table
+    if (!documentDeleted) {
+      return res.status(404).json({ message: 'Document not found for this employee' });
+    }
+
+    // Log activity
+    await logActivity({
+      userName: req.body.deletedBy || 'System',
+      actionType: 'DELETE',
+      resourceType: 'Employee Document',
+      resourceId: employeeId,
+      resourceName: `${employee.full_name} - ${documentType.toUpperCase()}`,
+      description: `Deleted ${documentType.toUpperCase()} document for ${employee.full_name} (${employeeId})`,
+      ipAddress: getClientIp(req),
+      status: 'success',
+    });
+
+    return res.json({ message: 'Document deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting employee document', error);
+    
+    await logActivity({
+      userName: req.body.deletedBy || 'System',
+      actionType: 'DELETE',
+      resourceType: 'Employee Document',
+      resourceId: req.params.employeeId,
+      description: `Failed to delete document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      ipAddress: getClientIp(req),
+      status: 'failed',
+    });
+
+    return res.status(500).json({ message: 'Unexpected error while deleting document' });
+  }
+});
+
 export default router;
 

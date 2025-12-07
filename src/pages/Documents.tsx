@@ -2,7 +2,7 @@ import { ChangeEvent, useState, useEffect } from "react";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Folder, Edit, FileText, Download } from "lucide-react";
+import { Search, Folder, Edit, FileText, Download, XCircle } from "lucide-react";
 import { apiFetch } from '@/lib/fetch';
 import {
   Dialog,
@@ -475,7 +475,7 @@ const Documents = () => {
                       setIsGeneratingDocument(true);
                       setActiveTemplateKey(template.key);
                       try {
-                        const response = await fetch(
+                        const response = await apiFetch(
                           `${API_BASE_URL}/employees?employeeId=${generatorEmployeeId}`
                         );
                         if (!response.ok)
@@ -737,6 +737,22 @@ const Documents = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  // Open edit dialog for PDS
+                                  setEditingDoc({
+                                    employeeId: doc.employeeId,
+                                    type: "pds",
+                                    currentUrl: doc.pds,
+                                  });
+                                  setShowEditDocDialog(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              {/* <Button
+                                variant="ghost"
+                                size="sm"
                                 className="h-6 w-6 p-0"
                                 onClick={() => {
                                   // Open edit dialog for PDS
@@ -750,7 +766,8 @@ const Documents = () => {
                                 title="Edit PDS"
                               >
                                 <Edit className="h-3 w-3" />
-                              </Button>
+                                Edit
+                              </Button> */}
                             </div>
                           ) : (
                             <Button
@@ -1354,8 +1371,56 @@ const Documents = () => {
                         }
                       }}
                     >
+                      
                       <Download className="h-4 w-4" />
                       Download Current
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={async () => {
+                        if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+                          return;
+                        }
+                        
+                        try {
+                          const response = await apiFetch(
+                            `${API_BASE_URL}/documents/employee/${editingDoc.employeeId}/${editingDoc.type}`,
+                            {
+                              method: 'DELETE',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ deletedBy: user?.fullName || 'Admin' }),
+                            }
+                          );
+                          
+                          if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.message || 'Failed to delete document');
+                          }
+
+                          toast({
+                            title: "Success",
+                            description: "Document has been deleted",
+                          });
+
+                          // Refresh documents and close dialog
+                          await fetchAndProcessDocuments();
+                          setShowEditDocDialog(false);
+                          setEditingDoc(null);
+                          setEditDocFile(null);
+                        } catch (error) {
+                          console.error("Error deleting document", error);
+                          toast({
+                            variant: "destructive",
+                            title: "Error",
+                            description: error instanceof Error ? error.message : "Failed to delete document",
+                          });
+                        }
+                      }}
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Delete Current
                     </Button>
                   </div>
                 )}
@@ -1411,7 +1476,7 @@ const Documents = () => {
                           let existingDocId: string | null = null;
                           if (editingDoc.currentUrl) {
                             try {
-                              const checkResponse = await fetch(
+                              const checkResponse = await apiFetch(
                                 `${API_BASE_URL}/documents?employeeId=${editingDoc.employeeId}&documentType=${editingDoc.type}&type=employee-doc`
                               );
                               if (checkResponse.ok) {
@@ -1431,7 +1496,7 @@ const Documents = () => {
                             ? `${API_BASE_URL}/documents/${existingDocId}`
                             : `${API_BASE_URL}/documents`;
 
-                          const response = await fetch(url, {
+                          const response = await apiFetch(url, {
                             method: method,
                             body: formData,
                           });
@@ -1515,7 +1580,7 @@ const Documents = () => {
                       </Button>
                     </div>
                   </object>
-                ) : viewingDoc.url.toLowerCase().endsWith('.pdf') || viewingDoc.type === 'pdf' ? (
+                ) : viewingDoc.url.toLowerCase().endsWith('.pdf') ? (
                   // PDF file - use iframe for preview
                   <>
                     <iframe
