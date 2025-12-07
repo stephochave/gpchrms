@@ -450,7 +450,7 @@ const Profile = () => {
                         ctx?.drawImage(img, 0, 0, 300, 300);
                         const pngFile = canvas.toDataURL('image/png');
                         const downloadLink = document.createElement('a');
-                        downloadLink.download = `QR-${employeeData.employeeId}.png`;
+                        downloadLink.download = `QR-${employeeData.employeeId}-${employeeData.fullName}.png`;
                         downloadLink.href = pngFile;
                         downloadLink.click();
                       };
@@ -961,7 +961,7 @@ const Profile = () => {
               variant="outline"
               className="w-full"
               onClick={() => {
-                const svg = document.querySelector('.bg-white svg');
+                const svg = document.getElementById('employee-qr-code');
                 if (!svg) return;
                 const svgData = new XMLSerializer().serializeToString(svg);
                 const canvas = document.createElement('canvas');
