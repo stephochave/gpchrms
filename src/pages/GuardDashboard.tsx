@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
 import { QRScanner } from '@/components/QRScanner';
 import { Button } from '@/components/ui/button';
@@ -18,82 +19,101 @@ interface ScanResult {
   employeeName: string;
   department: string;
   position: string;
+  scanmode?: 'checkIn' | 'checkOut';
   timestamp: Date;
   status: 'success' | 'error';
   message?: string;
 }
-
 export default function GuardDashboard() {
   const [scanHistory, setScanHistory] = useState<ScanResult[]>([]);
+    // Load scan history from localStorage on mount
+    useEffect(() => {
+      const saved = localStorage.getItem('guard_scan_history');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setScanHistory(parsed.map(s => ({ ...s, timestamp: new Date(s.timestamp) })));
+          }
+        } catch {}
+      }
+    }, []);
+
+    // Save scan history to localStorage whenever it changes
+    useEffect(() => {
+      localStorage.setItem('guard_scan_history', JSON.stringify(scanHistory));
+    }, [scanHistory]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanMode, setScanMode] = useState<'checkIn' | 'checkOut' | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [currentTime, setCurrentTime] = useState(format(new Date(), "HH:mm:ss"));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(format(new Date(), "HH:mm:ss"));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleQRScan = async (qrToken: string) => {
-    if (isProcessing) return;
-    
+    if (isProcessing || !scanMode) return;
     setIsProcessing(true);
     const scanTime = new Date();
-
     try {
       // Verify QR code
       const verifyResponse = await apiFetch(`${API_BASE_URL}/attendance/verify-qr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          qrToken,
-          scannedBy: 'Guard'
-        }),
+        body: JSON.stringify({ qrToken, scannedBy: 'Guard' }),
       });
-
       const verifyData = await verifyResponse.json();
-
       if (!verifyResponse.ok) {
         throw new Error(verifyData.message || 'QR verification failed');
       }
-
-      // Mark attendance
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const currentTime = format(new Date(), 'HH:mm');
-
+      // Mark attendance for selected mode
+      const today = format(scanTime, 'yyyy-MM-dd');
+      const currentTime = format(scanTime, 'HH:mm');
+      const body: any = {
+        employeeId: verifyData.employee.employeeId,
+        employeeName: verifyData.employee.employeeName,
+        date: today,
+        status: 'present',
+        qrVerified: true,
+        verificationMethod: 'guard_qr',
+        notes: 'Scanned by guard',
+      };
+      if (scanMode === 'checkIn') body.checkIn = currentTime;
+      if (scanMode === 'checkOut') body.checkOut = currentTime;
       const attendanceResponse = await apiFetch(`${API_BASE_URL}/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employeeId: verifyData.employee.employeeId,
-          employeeName: verifyData.employee.employeeName,
-          date: today,
-          checkIn: currentTime,
-          status: 'present',
-          qrVerified: true,
-          verificationMethod: 'guard_qr',
-          notes: 'Scanned by guard',
-        }),
+        body: JSON.stringify(body),
       });
-
       if (!attendanceResponse.ok) {
         const errorData = await attendanceResponse.json();
         throw new Error(errorData.message || 'Failed to mark attendance');
       }
-
       // Success
       const scanResult: ScanResult = {
         employeeId: verifyData.employee.employeeId,
         employeeName: verifyData.employee.employeeName,
         department: verifyData.employee.department,
         position: verifyData.employee.position,
+        scanmode: scanMode,
         timestamp: scanTime,
         status: 'success',
       };
-
-      setScanHistory(prev => [scanResult, ...prev.slice(0, 19)]); // Keep last 20 scans
-
+      setScanHistory(prev => {
+        const updated = [scanResult, ...prev.slice(0, 19)];
+        return updated;
+      });
       toast({
         title: 'Attendance Recorded',
-        description: `${verifyData.employee.employeeName} checked in successfully at ${currentTime}`,
+        description: `${verifyData.employee.employeeName} ${scanMode === 'checkIn' ? 'checked in' : 'checked out'} successfully at ${currentTime}`,
         duration: 3000,
       });
-
     } catch (error: any) {
       const errorResult: ScanResult = {
         employeeId: '',
@@ -104,9 +124,10 @@ export default function GuardDashboard() {
         status: 'error',
         message: error.message || 'QR scan failed',
       };
-
-      setScanHistory(prev => [errorResult, ...prev.slice(0, 19)]);
-
+      setScanHistory(prev => {
+        const updated = [errorResult, ...prev.slice(0, 19)];
+        return updated;
+      });
       toast({
         title: 'Scan Failed',
         description: error.message || 'Unable to process QR code',
@@ -115,8 +136,10 @@ export default function GuardDashboard() {
       });
     } finally {
       setIsProcessing(false);
+      setScanMode(null);
     }
   };
+
 
   const handleLogout = () => {
     localStorage.removeItem('hrms_token');
@@ -187,112 +210,133 @@ export default function GuardDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Current Time</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {format(new Date(), 'HH:mm')}
+                    {currentTime}
                   </p>
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> 
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* QR Scanner */}
-          <div className="lg:sticky lg:top-4 h-fit">
-            <QRScanner
-              onScan={handleQRScan}
-              onError={(error) => {
-                toast({
-                  title: 'Scanner Error',
-                  description: error,
-                  variant: 'destructive',
-                });
-              }}
-              title="Scan Employee QR Code"
-              description="Position the employee's QR code within the camera frame"
-            />
-            {isProcessing && (
-              <Alert className="mt-4">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <AlertDescription>Processing QR code...</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          {/* Scan History */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Scans</CardTitle>
-              <CardDescription>Last 20 scan attempts (today highlighted)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {scanHistory.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">
-                    No scans yet. Start scanning employee QR codes.
-                  </p>
-                ) : (
-                  scanHistory.map((scan, index) => {
-                    const isToday = format(scan.timestamp, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                    return (
-                      <div
-                        key={index}
-                        className={`p-4 rounded-lg border ${
-                          isToday ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              {scan.status === 'success' ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                              ) : (
-                                <XCircle className="h-5 w-5 text-red-600" />
-                              )}
-                              <span className="font-semibold text-gray-900">
-                                {scan.employeeName}
-                              </span>
-                            </div>
-                            {scan.status === 'success' ? (
-                              <>
-                                <p className="text-sm text-gray-600">
-                                  {scan.employeeId} • {scan.department}
-                                </p>
-                                <p className="text-xs text-gray-500">{scan.position}</p>
-                              </>
-                            ) : (
-                              <p className="text-sm text-red-600">{scan.message}</p>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <Badge variant={scan.status === 'success' ? 'default' : 'destructive'}>
-                              {scan.status}
-                            </Badge>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {format(scan.timestamp, 'HH:mm:ss')}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {scanHistory.length > 0 && (
+        {/* Scan Mode Buttons */}
+        <div className="flex gap-4 mb-6">
+          <Button size="lg" onClick={() => setScanMode('checkIn')} disabled={isProcessing}>
+            Start Scanning for Check-in
+          </Button>
+          <Button size="lg" variant="outline" onClick={() => setScanMode('checkOut')} disabled={isProcessing}>
+            Start Scanning for Check-out
+          </Button>
+          {scanMode && (
+            <Button size="lg" variant="secondary" onClick={() => setScanMode(null)} disabled={isProcessing}>
+              Cancel Scanning
+            </Button>
+          )}
+        </div>
+        <div className="container mx-auto py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* QR Scanner (show when scanMode is active, allow switching) */}
+            <div className="lg:sticky lg:top-4 h-fit">
+              {scanMode && (
                 <>
-                  <Separator className="my-4" />
-                  <div className="text-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setScanHistory([])}
-                    >
-                      Clear History
-                    </Button>
-                  </div>
+                  <QRScanner
+                    onScan={handleQRScan}
+                    onError={(error) => {
+                      toast({
+                        title: 'Scanner Error',
+                        description: error,
+                        variant: 'destructive',
+                      });
+                    }}
+                    title={`Scan Employee QR Code for ${scanMode === 'checkIn' ? 'Check-in' : 'Check-out'}`}
+                    description="Position the employee's QR code within the camera frame"
+                  />
+                  {isProcessing && (
+                    <Alert className="mt-4">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <AlertDescription>Processing QR code...</AlertDescription>
+                    </Alert>
+                  )}
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+            {/* Scan History */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Scans</CardTitle>
+                <CardDescription>Last 20 scan attempts (today highlighted)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {scanHistory.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">
+                      No scans yet. Start scanning employee QR codes.
+                    </p>
+                  ) : (
+                    scanHistory.map((scan, index) => {
+                      const isToday = format(scan.timestamp, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                      return (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg border ${
+                            isToday ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                {scan.status === 'success' ? (
+                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                ) : (
+                                  <XCircle className="h-5 w-5 text-red-600" />
+                                )}
+                                <span className="font-semibold text-gray-900">
+                                  {scan.employeeName} - {scan.scanmode === 'checkIn' ? 'Check-in' : 'Check-out'}
+                                </span>
+                              </div>
+                              {scan.status === 'success' ? (
+                                <>
+                                  <p className="text-sm text-gray-600">
+                                    {scan.employeeId} • {scan.department}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{scan.position}</p>
+                                </>
+                              ) : (
+                                <p className="text-sm text-red-600">{scan.message}</p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <Badge variant={scan.status === 'success' ? 'default' : 'destructive'}>
+                                {scan.status}
+                              </Badge>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {format(scan.timestamp, 'HH:mm:ss')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                {scanHistory.length > 0 && (
+                  <>
+                    <Separator className="my-4" />
+                    <div className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setScanHistory([]);
+                          localStorage.removeItem('guard_scan_history');
+                        }}
+                      >
+                        Clear History
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
