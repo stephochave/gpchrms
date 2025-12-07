@@ -392,14 +392,30 @@ router.get('/file/:employeeId/:type', async (req, res) => {
     
     console.log(`Serving file for employee ${employeeId}, type: ${type}`);
     
+    // Normalize document type to handle variations
+    // sr/serviceRecord -> check both
+    // coe/201 -> check both
+    // contract/contractOfEmployment -> check both
+    const documentTypes: string[] = [];
+    if (type === 'sr' || type === 'serviceRecord') {
+      documentTypes.push('sr', 'serviceRecord');
+    } else if (type === 'coe' || type === '201') {
+      documentTypes.push('coe', '201');
+    } else if (type === 'contract' || type === 'contractOfEmployment') {
+      documentTypes.push('contract', 'contractOfEmployment');
+    } else {
+      documentTypes.push(type);
+    }
+    
     let storedMimeType: string | null = null;
     
     // Check documents table first for all types
     // Try with mime_type column, if it doesn't exist, fall back to without it
     try {
+      const placeholders = documentTypes.map(() => '?').join(',');
       const [docRows] = await pool.execute<any[]>(
-        'SELECT file_url, file_path, mime_type FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
-        [employeeId, type]
+        `SELECT file_url, file_path, mime_type FROM documents WHERE employee_id = ? AND document_type IN (${placeholders}) ORDER BY created_at DESC LIMIT 1`,
+        [employeeId, ...documentTypes]
       );
       
       if (docRows.length > 0) {
@@ -424,9 +440,10 @@ router.get('/file/:employeeId/:type', async (req, res) => {
       // If mime_type column doesn't exist, try without it
       if (error.code === 'ER_BAD_FIELD_ERROR') {
         console.log('mime_type column not found, querying without it');
+        const placeholders = documentTypes.map(() => '?').join(',');
         const [docRows] = await pool.execute<any[]>(
-          'SELECT file_url, file_path FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
-          [employeeId, type]
+          `SELECT file_url, file_path FROM documents WHERE employee_id = ? AND document_type IN (${placeholders}) ORDER BY created_at DESC LIMIT 1`,
+          [employeeId, ...documentTypes]
         );
         
         if (docRows.length > 0) {
@@ -445,36 +462,9 @@ router.get('/file/:employeeId/:type', async (req, res) => {
       }
     }
     
-    // If not found in documents table, check employees table for legacy data
-    if (!fileData && (type === 'pds' || type === 'sr' || type === 'file_201')) {
-      const [empRows] = await pool.execute<any[]>(
-        'SELECT pds_file, pdsFile, service_record_file, serviceRecordFile, file_201 FROM employees WHERE employee_id = ?',
-        [employeeId]
-      );
-      
-      if (empRows.length > 0) {
-        const employee = empRows[0];
-        console.log(`Checking employees table for legacy data:`, {
-          employee_id: employeeId,
-          has_pds_file: !!employee.pds_file,
-          has_service_record_file: !!employee.service_record_file,
-          has_file_201: !!employee.file_201
-        });
-        
-        // Get the appropriate file based on type
-        if (type === 'pds') {
-          fileData = employee.pds_file || employee.pdsFile;
-        } else if (type === 'sr') {
-          fileData = employee.service_record_file || employee.serviceRecordFile;
-        } else if (type === 'file_201') {
-          fileData = employee.file_201;
-        }
-      }
-    }
-    
-    // For COE, only check documents table (already done above)
-    if (type === 'coe' && !fileData) {
-      console.log(`COE not found in documents table for employee ${employeeId}`);
+    // All documents should now be in the documents table only
+    if (!fileData) {
+      console.log(`Document type '${type}' not found in documents table for employee ${employeeId}`);
     }
     
     if (!fileData) {

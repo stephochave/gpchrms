@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,6 +38,14 @@ interface EmployeeDocument {
   date: string;
 }
 
+interface ReportSample {
+  name: string;
+  file: string;
+  coverage: string;
+  preparedBy: string;
+  date: string;
+}
+
 const EmployeeDocuments = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -60,11 +68,27 @@ const EmployeeDocuments = () => {
   const [isGeneratingDocument, setIsGeneratingDocument] = useState(false);
   const [activeTemplateKey, setActiveTemplateKey] =
     useState<DocumentTemplateKey | null>(null);
+  const [fetchedDocuments, setFetchedDocuments] = useState<any[]>([]);
   const { toast } = useToast();
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
   const employees = useMemo(() => employeeStorage.getActive(), []);
+
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        const response = await apiFetch(`${API_BASE_URL}/documents?type=employee-doc`);
+        if (response.ok) {
+          const data = await response.json();
+          setFetchedDocuments(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching documents:', error);
+      }
+    };
+    fetchDocuments();
+  }, [API_BASE_URL]);
 
   const documentTemplateOptions = useMemo(
     () => [
@@ -79,7 +103,7 @@ const EmployeeDocuments = () => {
         description: "Snapshot of employee records",
       },
       {
-        key: "serviceRecord" as DocumentTemplateKey,
+        key: "sr" as DocumentTemplateKey,
         label: "Service Record",
         description: "Employment history overview",
       },
@@ -94,16 +118,23 @@ const EmployeeDocuments = () => {
 
   const employeeDocuments = useMemo<EmployeeDocument[]>(
     () =>
-      employees.map((emp) => ({
-        employeeId: emp.employeeId,
-        employeeName: emp.fullName,
-        personalDataSheet: null,
-        serviceRecords: null,
-        contractOfEmployment: null,
-        certificateOfEmployment: null,
-        date: emp.dateHired,
-      })),
-    [employees]
+      employees.map((emp) => {
+        const pds = fetchedDocuments.find(d => d.employeeId === emp.employeeId && (d.documentType === 'pds'));
+        const sr = fetchedDocuments.find(d => d.employeeId === emp.employeeId && (d.documentType === 'sr' || d.documentType === 'serviceRecord'));
+        const contract = fetchedDocuments.find(d => d.employeeId === emp.employeeId && d.documentType === 'contract');
+        const coe = fetchedDocuments.find(d => d.employeeId === emp.employeeId && (d.documentType === 'coe' || d.documentType === '201'));
+        
+        return {
+          employeeId: emp.employeeId,
+          employeeName: emp.fullName,
+          personalDataSheet: pds ? pds.fileUrl : null,
+          serviceRecords: sr ? sr.fileUrl : null,
+          contractOfEmployment: contract ? contract.fileUrl : null,
+          certificateOfEmployment: coe ? coe.fileUrl : null,
+          date: emp.dateHired,
+        };
+      }),
+    [employees, fetchedDocuments]
   );
 
   const documentCategories = [
@@ -415,6 +446,7 @@ const EmployeeDocuments = () => {
           fullName: emp.fullName,
           department: emp.department,
           position: emp.position,
+          designation: emp.position,
         }))
       : sampleEmployeesForReports;
 
@@ -714,6 +746,10 @@ const EmployeeDocuments = () => {
                           size="sm"
                           variant="ghost"
                           className="text-blue-500"
+                          onClick={() => {
+                            const fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
+                            window.open(fileUrl, "_blank");
+                          }}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -729,6 +765,10 @@ const EmployeeDocuments = () => {
                           size="sm"
                           variant="ghost"
                           className="text-blue-500"
+                          onClick={() => {
+                            const fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
+                            window.open(fileUrl, "_blank");
+                          }}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -744,6 +784,10 @@ const EmployeeDocuments = () => {
                           size="sm"
                           variant="ghost"
                           className="text-blue-500"
+                          onClick={() => {
+                            const fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/contract`;
+                            window.open(fileUrl, "_blank");
+                          }}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -759,6 +803,10 @@ const EmployeeDocuments = () => {
                           size="sm"
                           variant="ghost"
                           className="text-blue-500"
+                          onClick={() => {
+                            const fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                            window.open(fileUrl, "_blank");
+                          }}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -913,7 +961,7 @@ const EmployeeDocuments = () => {
                       <th className="py-3 px-4 text-left font-medium">
                         Position
                       </th>
-                      <th className="py-3 px-4 text-left font-medium text-center">
+                      <th className="py-3 px-4 font-medium text-center">
                         Action
                       </th>
                     </tr>

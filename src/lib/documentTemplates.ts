@@ -284,7 +284,7 @@ export const generateFile201Document = (employee: Employee): string => `
 </html>
 `;
 
-export type DocumentTemplateKey = 'pds' | 'file201' | 'coe' | 'serviceRecord';
+export type DocumentTemplateKey = 'pds' | 'file201' | 'coe' | 'sr';
 
 export const generateDocumentByTemplate = (key: DocumentTemplateKey, employee: Employee): string => {
   switch (key) {
@@ -292,7 +292,7 @@ export const generateDocumentByTemplate = (key: DocumentTemplateKey, employee: E
       return generatePersonalDataSheet(employee);
     case 'file201':
       return generateFile201Document(employee);
-    case 'serviceRecord':
+    case 'sr':
       return generateServiceRecord(employee);
     case 'coe':
     default:

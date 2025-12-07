@@ -2,7 +2,7 @@ import { ChangeEvent, useState, useEffect } from "react";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Folder, Edit, FileText, Download, XCircle } from "lucide-react";
+import { Search, Folder, Edit, FileText, Download, XCircle, XIcon, File } from "lucide-react";
 import { apiFetch } from '@/lib/fetch';
 import {
   Dialog,
@@ -26,6 +26,7 @@ import {
   DocumentTemplateKey,
   generateDocumentByTemplate,
 } from "@/lib/documentTemplates";
+import { title } from "process";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -147,7 +148,7 @@ const Documents = () => {
           id: emp.employeeId,
           name: emp.fullName || "",
           employeeId: emp.employeeId,
-          pds: emp.pdsFile 
+          pds: emp.pdsFile
             ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
             : null,
           sr: emp.serviceRecordFile
@@ -159,8 +160,8 @@ const Documents = () => {
       } else if (emp.employeeId) {
         const empDoc = employeeDocs.get(emp.employeeId)!;
         if (emp.pdsFile && !empDoc.pds) {
-          empDoc.pds = emp.pdsFile.startsWith('data:') 
-            ? emp.pdsFile 
+          empDoc.pds = emp.pdsFile.startsWith('data:')
+            ? emp.pdsFile
             : `/uploads/${emp.pdsFile}`;
         }
         if (emp.serviceRecordFile && !empDoc.sr) {
@@ -197,11 +198,13 @@ const Documents = () => {
           empDoc.pds = doc.fileUrl;
         } else if (
           docType === "sr" ||
+          doc.name.toLowerCase().includes("sr") ||
           doc.name.toLowerCase().includes("service")
         ) {
           empDoc.sr = doc.fileUrl;
         } else if (
           docType === "coe" ||
+          doc.name.toLowerCase().includes("coe") ||
           doc.name.toLowerCase().includes("certificate")
         ) {
           empDoc.coe = doc.fileUrl;
@@ -438,7 +441,7 @@ const Documents = () => {
                 description: "Snapshot of employee records",
               },
               {
-                key: "serviceRecord" as DocumentTemplateKey,
+                key: "sr" as DocumentTemplateKey,
                 label: "Service Record",
                 description: "Employment history overview",
               },
@@ -711,10 +714,10 @@ const Documents = () => {
                                     });
                                     return;
                                   }
-                                  
+
                                   const isBase64 = doc.pds.startsWith('data:');
                                   let fileUrl: string;
-                                  
+
                                   if (isBase64) {
                                     fileUrl = doc.pds;
                                   } else {
@@ -722,7 +725,7 @@ const Documents = () => {
                                     // This ensures proper headers and CORS handling
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
                                   }
-                                  
+
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Personal Data Sheet - ${doc.employeeId}`,
@@ -732,6 +735,7 @@ const Documents = () => {
                                   setShowViewDocDialog(true);
                                 }}
                               >
+                                <File className="h-3 w-3" />
                                 View
                               </Button>
                               <Button
@@ -748,6 +752,7 @@ const Documents = () => {
                                   setShowEditDocDialog(true);
                                 }}
                               >
+                                <Edit className="h-3 w-3" />
                                 Edit
                               </Button>
                               {/* <Button
@@ -794,7 +799,7 @@ const Documents = () => {
                                 variant="ghost"
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (!doc.sr || !validateDocumentUrl(doc.sr)) {
                                     toast({
                                       variant: "destructive",
@@ -803,20 +808,18 @@ const Documents = () => {
                                     });
                                     return;
                                   }
-                                  
+
                                   const isBase64 = doc.sr.startsWith('data:');
                                   let fileUrl: string;
-                                  
+
                                   if (isBase64) {
                                     fileUrl = doc.sr;
-                                  } else if (doc.sr.startsWith('/uploads/')) {
-                                    fileUrl = `${API_BASE_URL}${doc.sr}`;
-                                  } else if (doc.sr.startsWith('http')) {
-                                    fileUrl = doc.sr;
                                   } else {
+                                    // Always use the backend route to serve the file
+                                    // This ensures proper headers and CORS handling
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
                                   }
-                                  
+
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Service Record - ${doc.employeeId}`,
@@ -826,13 +829,15 @@ const Documents = () => {
                                   setShowViewDocDialog(true);
                                 }}
                               >
+                                <File className="h-3 w-3" />
                                 View
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
+                                  // Open edit dialog for PDS
                                   setEditingDoc({
                                     employeeId: doc.employeeId,
                                     type: "sr",
@@ -840,9 +845,9 @@ const Documents = () => {
                                   });
                                   setShowEditDocDialog(true);
                                 }}
-                                title="Edit Service Records"
                               >
                                 <Edit className="h-3 w-3" />
+                                Edit
                               </Button>
                             </div>
                           ) : (
@@ -870,7 +875,7 @@ const Documents = () => {
                                 variant="ghost"
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (!doc.coe || !validateDocumentUrl(doc.coe)) {
                                     toast({
                                       variant: "destructive",
@@ -879,43 +884,18 @@ const Documents = () => {
                                     });
                                     return;
                                   }
-                                  
+
                                   const isBase64 = doc.coe.startsWith('data:');
                                   let fileUrl: string;
-                                  
+
                                   if (isBase64) {
                                     fileUrl = doc.coe;
-                                  } else if (doc.coe.startsWith('/uploads/')) {
-                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
-                                  } else if (doc.coe.startsWith('http')) {
-                                    fileUrl = doc.coe;
-                                  } else if (doc.coe.startsWith('/') && doc.employeeId) {
-                                    // Relative path - use backend route
-                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
-                                  } else if (doc.employeeId) {
-                                    // File path - use backend route to serve it
-                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
                                   } else {
-                                    toast({
-                                      variant: "destructive",
-                                      title: "Error",
-                                      description: "Invalid document URL. Please contact administrator.",
-                                    });
-                                    return;
+                                    // Always use the backend route to serve the file
+                                    // This ensures proper headers and CORS handling
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
                                   }
-                                  
-                                  // Validate URL before setting
-                                  if (!fileUrl || fileUrl.trim() === '' || fileUrl === `${API_BASE_URL}/` || fileUrl === API_BASE_URL || fileUrl.endsWith('/')) {
-                                    console.error('Invalid fileUrl:', fileUrl);
-                                    toast({
-                                      variant: "destructive",
-                                      title: "Error",
-                                      description: "Invalid document URL. Please contact administrator.",
-                                    });
-                                    return;
-                                  }
-                                  
-                                  console.log('Setting viewingDoc URL:', fileUrl, 'from doc.coe:', doc.coe);
+
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Certificate of Employment - ${doc.employeeId}`,
@@ -925,12 +905,13 @@ const Documents = () => {
                                   setShowViewDocDialog(true);
                                 }}
                               >
+                                <File className="h-3 w-3" />
                                 View
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
                                   setEditingDoc({
                                     employeeId: doc.employeeId,
@@ -942,6 +923,7 @@ const Documents = () => {
                                 title="Edit COE"
                               >
                                 <Edit className="h-3 w-3" />
+                                Edit
                               </Button>
                             </div>
                           ) : (
@@ -1331,8 +1313,7 @@ const Documents = () => {
             <DialogHeader>
               <DialogTitle>
                 {editingDoc &&
-                  `Edit ${editingDoc.type.toUpperCase()} - ${
-                    editingDoc.employeeId
+                  `Edit ${editingDoc.type.toUpperCase()} - ${editingDoc.employeeId
                   }`}
               </DialogTitle>
               <DialogDescription>
@@ -1353,10 +1334,10 @@ const Documents = () => {
                         try {
                           // Always use backend route for proper file serving
                           const fileUrl = `${API_BASE_URL}/documents/file/${editingDoc.employeeId}/${editingDoc.type}`;
-                          
+
                           // Open in new tab for download
                           window.open(fileUrl, '_blank');
-                          
+
                           toast({
                             title: "Download started",
                             description: "Opening document in new tab",
@@ -1371,7 +1352,7 @@ const Documents = () => {
                         }
                       }}
                     >
-                      
+
                       <Download className="h-4 w-4" />
                       Download Current
                     </Button>
@@ -1383,7 +1364,7 @@ const Documents = () => {
                         if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
                           return;
                         }
-                        
+
                         try {
                           const response = await apiFetch(
                             `${API_BASE_URL}/documents/employee/${editingDoc.employeeId}/${editingDoc.type}`,
@@ -1393,7 +1374,7 @@ const Documents = () => {
                               body: JSON.stringify({ deletedBy: user?.fullName || 'Admin' }),
                             }
                           );
-                          
+
                           if (!response.ok) {
                             const errorData = await response.json().catch(() => ({}));
                             throw new Error(errorData.message || 'Failed to delete document');
@@ -1492,7 +1473,7 @@ const Documents = () => {
 
                           // Use PUT if document exists, POST if it doesn't
                           const method = existingDocId ? "PUT" : "POST";
-                          const url = existingDocId 
+                          const url = existingDocId
                             ? `${API_BASE_URL}/documents/${existingDocId}`
                             : `${API_BASE_URL}/documents`;
 
@@ -1508,8 +1489,8 @@ const Documents = () => {
 
                           toast({
                             title: "Success",
-                            description: existingDocId 
-                              ? "Document replaced successfully" 
+                            description: existingDocId
+                              ? "Document replaced successfully"
                               : "Document uploaded successfully",
                           });
 
@@ -1526,8 +1507,8 @@ const Documents = () => {
                           variant: "destructive",
                           title: "Error",
                           description:
-                            error instanceof Error 
-                              ? error.message 
+                            error instanceof Error
+                              ? error.message
                               : "Failed to upload document. Please try again.",
                         });
                       }
@@ -1604,7 +1585,7 @@ const Documents = () => {
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Download
+                        Download c
                       </Button>
                     </div>
                   </>
@@ -1623,23 +1604,37 @@ const Documents = () => {
                         });
                       }}
                     />
-                    <div className="absolute bottom-4 right-4 flex gap-2">
+                    {/* <div className="absolute bottom-4 right-4 flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         className="bg-white"
                         onClick={() => {
-                          window.open(viewingDoc.url, '_blank');
+                          try {
+                          // Always use backend route for proper file serving
+                          const fileUrl = `${API_BASE_URL}/documents/file/${editingDoc.employeeId}/${editingDoc.type}`;
+                          
+                          // Open in new tab for download
+                          window.open(fileUrl, '_blank');
+                          
                           toast({
-                            title: "Download Started",
-                            description: "Your document is being downloaded.",
+                            title: "Download started",
+                            description: "Opening document in new tab",
                           });
+                        } catch (error) {
+                          console.error("Error downloading document", error);
+                          toast({
+                            variant: "destructive",
+                            title: "Error",
+                            description: "Failed to download document",
+                          });
+                        }
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Download
+                        Download a
                       </Button>
-                    </div>
+                    </div> */}
                   </div>
                 )}
               </div>
@@ -1664,17 +1659,39 @@ const Documents = () => {
               {viewingDoc && (
                 <Button
                   onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = viewingDoc.url;
-                    link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    try {
+                      // Use the viewingDoc URL directly, or construct from type if needed
+                      let downloadUrl = viewingDoc.url;
+                      
+                      // If it's not a base64 URL and doesn't look like a full URL, 
+                      // ensure it's the backend route
+                      if (!viewingDoc.isBase64 && !downloadUrl.startsWith('http')) {
+                        // Extract employeeId from title (format: "Document Type - EmployeeId")
+                        const employeeId = viewingDoc.title.split(' - ')[1];
+                        if (employeeId) {
+                          downloadUrl = `${API_BASE_URL}/documents/file/${employeeId}/${viewingDoc.type}`;
+                        }
+                      }
+
+                      // Open in new tab for download
+                      window.open(downloadUrl, '_blank');
+
+                      toast({
+                        title: "Download started",
+                        description: "Opening document in new tab",
+                      });
+                    } catch (error) {
+                      console.error("Error downloading document", error);
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to download document",
+                      });
+                    }
                   }}
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Download
+                  Download b
                 </Button>
               )}
             </div>

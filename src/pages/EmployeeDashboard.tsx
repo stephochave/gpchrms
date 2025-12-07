@@ -75,21 +75,23 @@ const EmployeeDashboard = () => {
     if (!user?.employeeId) return;
 
     try {
+      // First, search by employeeId to get the full employee record
       const response = await apiFetch(
-        `${API_BASE_URL}/employees/${user.employeeId}`
+        `${API_BASE_URL}/employees?employeeId=${user.employeeId}`
       );
 
       if (response.ok) {
         const data = await response.json();
-        if (data.data) {
+        if (data.data && data.data.length > 0) {
+          const employeeData = data.data[0];
           setEmployee({
-            id: data.data.id,
-            employeeId: data.data.employeeId,
-            fullName: data.data.fullName,
-            position: data.data.designation || "Employee",
-            department: data.data.department || "College Department",
-            employmentType: data.data.employmentType || "Regular",
-            qrCodeData: data.data.qrCodeData,
+            id: employeeData.id,
+            employeeId: employeeData.employeeId,
+            fullName: employeeData.fullName,
+            position: employeeData.position || "Employee",
+            department: employeeData.department || "College Department",
+            employmentType: employeeData.employmentType || "Regular",
+            qrCodeData: employeeData.qrCodeData,
           });
         } else {
           setEmployee({

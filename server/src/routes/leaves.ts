@@ -42,7 +42,7 @@ const createLeaveSchema = z
     leaveType: z.enum(['vacation', 'sick', 'emergency', 'unpaid', 'other']),
     startDate: z.string().regex(dateRegex, 'Start date must be in YYYY-MM-DD format'),
     endDate: z.string().regex(dateRegex, 'End date must be in YYYY-MM-DD format'),
-    reason: z.string().trim().max(2000).optional().nullable(),
+    reason: z.string().trim().min(5, 'Reason must be at least 5 characters').max(2000, 'Reason is too long'),
   })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: 'End date cannot be before start date',
@@ -146,9 +146,9 @@ router.post('/', async (req, res) => {
     await ensureLeaveTable();
     const [result] = await pool.execute(
       `INSERT INTO leave_requests 
-         (employee_id, employee_name, leave_type, start_date, end_date, reason, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      [employeeId, employeeName, leaveType, startDate, endDate, reason || null],
+         (employee_id, employee_name, leave_type, start_date, end_date, reason, status, total_days)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', DATEDIFF(?, ?))`,
+      [employeeId, employeeName, leaveType, startDate, endDate, reason, endDate, startDate],
     );
 
     const insertId = (result as any).insertId;

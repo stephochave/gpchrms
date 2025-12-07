@@ -363,7 +363,9 @@ const Leaves = () => {
                   <label className="text-sm text-muted-foreground">Reason</label>
                   <Textarea
                     rows={3}
-                    placeholder="Provide details (optional)"
+                    placeholder="Provide details"
+                    required
+                    minLength={5}
                     value={form.reason}
                     onChange={(e) => setForm((prev) => ({ ...prev, reason: e.target.value }))}
                   />

@@ -878,7 +878,7 @@ router.post("/:id/upload-document", async (req, res) => {
     const { id } = req.params;
     const { documentType, employeeId } = req.body;
 
-    if (!documentType || !["pds", "serviceRecord", "201"].includes(documentType)) {
+    if (!documentType || !["pds", "src", "201"].includes(documentType)) {
       return res.status(400).json({ message: "Invalid document type" });
     }
 
@@ -904,7 +904,7 @@ router.post("/:id/upload-document", async (req, res) => {
     // Map document type to database column
     const columnMap: Record<string, string> = {
       pds: "pds_file",
-      serviceRecord: "service_record_file",
+      sr: "service_record_file",
       "201": "file_201",
     };
 

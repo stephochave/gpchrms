@@ -263,6 +263,7 @@ const Employees = () => {
     suffixName: employee.suffixName || "",
     fullName: employee.fullName,
     department: employee.department,
+    designation: employee.position,
     position: employee.position,
     email: employee.email,
     phone: employee.phone,

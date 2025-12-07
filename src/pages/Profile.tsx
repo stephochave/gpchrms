@@ -71,6 +71,7 @@ const Profile = () => {
       fullName: employeeData?.fullName || user?.fullName || "Sample Employee",
       department: employeeData?.department || "Human Resources",
       position: employeeData?.position || "Staff",
+      designation: employeeData?.position || "Staff",
       email: employeeData?.email || user?.email || "sample@gpc.edu.ph",
       phone: employeeData?.phone || "N/A",
       dateOfBirth: employeeData?.dateOfBirth || "1990-01-01",
@@ -98,7 +99,7 @@ const Profile = () => {
     };
   };
 
-  const openDocumentPreview = (type: "pds" | "serviceRecord") => {
+  const openDocumentPreview = (type: "pds" | "sr") => {
     if (!user) return;
     const employeeDoc = buildDocumentEmployee();
     const html =
@@ -122,25 +123,28 @@ const Profile = () => {
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    docType: "pds" | "serviceRecord" | "201"
+    docType: "pds" | "sr" | "201"
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 100 * 1024 * 1024) {
       toast({
         variant: "destructive",
         title: "File too large",
-        description: "File must be smaller than 10MB",
+        description: "File must be smaller than 100MB",
       });
       return;
     }
 
-    if (!file.type.includes("pdf") && !file.type.includes("image")) {
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const isAllowedType = allowedTypes.some(type => file.type.includes(type)) || file.type.includes('image');
+    
+    if (!isAllowedType) {
       toast({
         variant: "destructive",
         title: "Invalid file type",
-        description: "Please upload a PDF or image file",
+        description: "Please upload a PDF, DOC, DOCX, or image file",
       });
       return;
     }
@@ -150,10 +154,13 @@ const Profile = () => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("documentType", docType);
+      formData.append("name", `${docType}_${user?.employeeId || 'unknown'}`);
+      formData.append("type", "employee-doc");
       formData.append("employeeId", user?.employeeId || "");
+      formData.append("documentType", docType);
+      formData.append("uploadedBy", user?.fullName || "System");
 
-      const response = await fetch(`${API_BASE_URL}/employees/${employeeData?.id}/upload-document`, {
+      const response = await apiFetch(`${API_BASE_URL}/documents`, {
         method: "POST",
         body: formData,
       });
@@ -644,7 +651,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.pdsFile}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/pds`;
                       window.open(fileUrl, "_blank");
                     }}
                   >
@@ -655,7 +662,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.pdsFile}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/pds`;
                       const link = document.createElement("a");
                       link.href = fileUrl;
                       link.download = `PDS_${
@@ -729,7 +736,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.serviceRecordFile}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/sr`;
                       window.open(fileUrl, "_blank");
                     }}
                   >
@@ -740,7 +747,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.serviceRecordFile}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/sr`;
                       const link = document.createElement("a");
                       link.href = fileUrl;
                       link.download = `ServiceRecord_${
@@ -757,18 +764,18 @@ const Profile = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={uploadingDoc === "serviceRecord"}
+                    disabled={uploadingDoc === "sr"}
                     onClick={() => document.getElementById("upload-service")?.click()}
                   >
                     <Upload className="h-4 w-4 mr-2" />
-                    {uploadingDoc === "serviceRecord" ? "Uploading..." : "Replace"}
+                    {uploadingDoc === "sr" ? "Uploading..." : "Replace"}
                   </Button>
                   <input
                     id="upload-service"
                     type="file"
                     accept=".pdf,image/*"
                     className="hidden"
-                    onChange={(e) => handleFileUpload(e, "serviceRecord")}
+                    onChange={(e) => handleFileUpload(e, "sr")}
                   />
                 </div>
               ) : (
@@ -776,7 +783,7 @@ const Profile = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => openDocumentPreview("serviceRecord")}
+                    onClick={() => openDocumentPreview("sr")}
                   >
                     <Eye className="h-4 w-4 mr-2" />
                     View
@@ -784,18 +791,18 @@ const Profile = () => {
                   <Button
                     variant="default"
                     size="sm"
-                    disabled={uploadingDoc === "serviceRecord"}
+                    disabled={uploadingDoc === "sr"}
                     onClick={() => document.getElementById("upload-service")?.click()}
                   >
                     <Upload className="h-4 w-4 mr-2" />
-                    {uploadingDoc === "serviceRecord" ? "Uploading..." : "Upload"}
+                    {uploadingDoc === "sr" ? "Uploading..." : "Upload"}
                   </Button>
                   <input
                     id="upload-service"
                     type="file"
                     accept=".pdf,image/*"
                     className="hidden"
-                    onChange={(e) => handleFileUpload(e, "serviceRecord")}
+                    onChange={(e) => handleFileUpload(e, "sr")}
                   />
                 </div>
               )}
@@ -814,7 +821,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.file201}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/201`;
                       window.open(fileUrl, "_blank");
                     }}
                   >
@@ -825,7 +832,7 @@ const Profile = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const fileUrl = `${API_BASE_URL}/uploads/${employeeData.file201}`;
+                      const fileUrl = `${API_BASE_URL}/documents/file/${employeeData.employeeId}/201`;
                       const link = document.createElement("a");
                       link.href = fileUrl;
                       link.download = `201File_${

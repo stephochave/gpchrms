@@ -53,7 +53,7 @@ const addInactiveDefault = {
   reactivationDate: "",
   uploadImage: "",
   uploadImagePreview: "",
-  serviceRecord: "",
+  sr: "",
   serviceRecordPreview: "",
   personalDataSheet: "",
   personalDataSheetPreview: "",
@@ -133,6 +133,7 @@ const InactiveEmployees = () => {
     fullName: employee.fullName,
     department: employee.department,
     position: employee.position,
+    designation: employee.position,
     email: employee.email,
     phone: employee.phone,
     dateOfBirth: employee.dateOfBirth || "",
@@ -239,7 +240,7 @@ const InactiveEmployees = () => {
           password: generatedPassword,
           emergencyContact: addForm.reason?.trim() || "Not provided",
           educationalBackground: null,
-          serviceRecordFile: addForm.serviceRecord || null,
+          serviceRecordFile: addForm.sr || null,
           pdsFile: addForm.personalDataSheet || null,
           signatureFile: null,
           registeredFaceFile: addForm.uploadImage || null,
@@ -750,7 +751,7 @@ const InactiveEmployees = () => {
                     type="file"
                     accept=".pdf,.doc,.docx,image/*"
                     onChange={(e) =>
-                      handleFileChange("serviceRecord", e.target.files)
+                      handleFileChange("sr", e.target.files)
                     }
                   />
                 </div>
