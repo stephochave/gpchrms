@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/fetch';
-import { Loader2, QrCode, Download, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, QrCode, Download, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -57,6 +57,17 @@ export default function GenerateQRCodes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast({
+        title: 'Success',
+        description: 'QR code generated successfully',
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to generate QR code',
+      });
     },
   });
 
@@ -246,15 +257,36 @@ export default function GenerateQRCodes() {
                           includeMargin
                         />
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => downloadQRCode(employee.employeeId, employee.fullName)}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download QR
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => downloadQRCode(employee.employeeId, employee.fullName)}
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => generateQRMutation.mutate(employee.id)}
+                          disabled={generateQRMutation.isPending}
+                        >
+                          {generateQRMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Regenerating...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Regenerate
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </>
                   ) : (
                     <div className="space-y-3">
