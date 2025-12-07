@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_BASE_URL, getConnectionErrorMessage } from '@/lib/api';
+import { apiFetch } from '@/lib/fetch';
 
 interface User {
   id: string;
@@ -53,7 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         // Check if employee is still active
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees?employeeId=${storedUser.employeeId}`
         );
         
@@ -84,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (usernameOrEmailOrEmpId: string, password: string): Promise<AuthResponse> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await apiFetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

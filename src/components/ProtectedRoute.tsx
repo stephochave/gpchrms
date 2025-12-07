@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiFetch } from '@/lib/fetch';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
 
       try {
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees?employeeId=${user.employeeId}`
         );
         

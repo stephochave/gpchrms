@@ -115,6 +115,55 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /attendance/verify-qr - Verify QR code and return employee info
+router.post('/verify-qr', async (req, res) => {
+  const { qrToken, scannedBy } = req.body;
+  if (!qrToken) {
+    return res.status(400).json({ message: 'QR token is required' });
+  }
+
+  // TODO: Implement QR token verification logic here
+  // Example: decode JWT, validate, fetch employee by ID
+  try {
+    // Replace with your actual QR verification logic
+    // Example: const decoded = jwt.verify(qrToken, ...);
+    // For now, just decode without verifying (replace with secure logic!)
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try {
+      decoded = jwt.decode(qrToken);
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid QR token' });
+    }
+    if (!decoded || !decoded.employeeId) {
+      return res.status(400).json({ message: 'Invalid QR token payload' });
+    }
+
+    // Fetch employee info from database
+    const employeeId = decoded.employeeId || decoded.employee_id;
+    const [rows] = await pool.execute<any[]>(
+      'SELECT employee_id, full_name AS employeeName, department, position FROM employees WHERE employee_id = ?',
+      [employeeId]
+    );
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    return res.json({
+      employee: {
+        employeeId: rows[0].employee_id,
+        employeeName: rows[0].employeeName,
+        department: rows[0].department,
+        position: rows[0].position,
+      },
+      scannedBy,
+    });
+  } catch (error) {
+    console.error('QR verification failed', error);
+    return res.status(400).json({ message: 'Invalid or expired QR token' });
+  }
+});
+
 // POST /attendance - Create new attendance record
 router.post('/', async (req, res) => {
   const parseResult = attendanceSchema.safeParse(req.body);

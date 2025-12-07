@@ -12,6 +12,8 @@
  * For development, use http://localhost:4000 (or your local server URL)
  */
 
+import { apiFetch } from "./fetch";
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 /**
@@ -19,7 +21,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:40
  */
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await apiFetch(`${API_BASE_URL}/health`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

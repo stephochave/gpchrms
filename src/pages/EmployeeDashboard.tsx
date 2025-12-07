@@ -124,7 +124,7 @@ const EmployeeDashboard = () => {
 
     try {
       const today = new Date().toISOString().split("T")[0];
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/attendance?employeeId=${user.employeeId}&date=${today}`
       );
 

@@ -75,7 +75,7 @@ const DepartmentPage = () => {
         : `${API_BASE_URL}/departments`;
       const method = editingId ? "PUT" : "POST";
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",

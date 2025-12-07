@@ -428,7 +428,7 @@ const AttendanceList = () => {
       const formattedCheckIn = formatTime(editCheckIn);
       const formattedCheckOut = formatTime(editCheckOut);
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/attendance/${editingRecord.record.attendanceId}`,
         {
           method: "PUT",

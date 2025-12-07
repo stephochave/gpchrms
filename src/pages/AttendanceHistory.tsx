@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from '@/lib/fetch';
 import {
   Table,
   TableBody,
@@ -42,7 +43,7 @@ const AttendanceHistory = () => {
 
       try {
         setIsLoading(true);
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/attendance?employeeId=${user.employeeId}`
         );
 

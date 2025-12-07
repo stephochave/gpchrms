@@ -559,7 +559,7 @@ const Documents = () => {
 
                   // Fetch documents for this folder type
                   try {
-                    const response = await fetch(
+                    const response = await apiFetch(
                       `${API_BASE_URL}/documents?type=employee-doc&documentType=${folder.key}`
                     );
                     if (response.ok) {

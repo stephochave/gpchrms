@@ -415,7 +415,7 @@ const AttendanceReport = () => {
     if (!editingRecord) return;
     try {
       setIsSavingEdit(true);
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/attendance/${editingRecord.id}`,
         {
           method: "PUT",

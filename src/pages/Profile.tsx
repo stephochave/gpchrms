@@ -178,7 +178,7 @@ const Profile = () => {
       });
 
       // Refresh employee data
-      const refreshResponse = await fetch(
+      const refreshResponse = await apiFetch(
         `${API_BASE_URL}/employees?employeeId=${user?.employeeId}`
       );
       if (refreshResponse.ok) {
@@ -941,7 +941,7 @@ const Profile = () => {
               Scan this QR code for attendance
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col items-center gap-4 p-6">
+          <div className="flex flex-col items-center">
             <div className="bg-white p-6 rounded-lg">
               {employeeData?.qrCodeData && (
                 <QRCodeSVG

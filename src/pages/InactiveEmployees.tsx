@@ -341,7 +341,7 @@ const InactiveEmployees = () => {
     try {
       setIsSubmitting(true);
       // Update employee status to 'active' via API
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/employees/${selectedEmployee.id}`,
         {
           method: "PUT",

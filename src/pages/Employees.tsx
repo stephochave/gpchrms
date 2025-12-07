@@ -631,7 +631,7 @@ const Employees = () => {
           reactivationDate: editForm.reactivationDate || undefined,
         };
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees/${selectedEmployee.id}`,
           {
             method: "PUT",
@@ -681,7 +681,7 @@ const Employees = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/employees/${selectedEmployee.id}`,
         {
           method: "DELETE",
@@ -731,7 +731,7 @@ const Employees = () => {
     (async () => {
       try {
         setIsSubmitting(true);
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees/${selectedEmployee.id}/archive`,
           {
             method: "PATCH",
@@ -774,7 +774,7 @@ const Employees = () => {
     (async () => {
       try {
         setIsSubmitting(true);
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/employees/${selectedEmployee.id}/reset-password`,
           {
             method: "PATCH",

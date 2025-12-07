@@ -11,7 +11,7 @@ import { CheckCircle2, XCircle, Clock, LogOut, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { apiFetch } from '@/lib/fetch';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface ScanResult {
   employeeId: string;

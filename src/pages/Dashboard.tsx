@@ -158,7 +158,7 @@ const Dashboard = () => {
   const fetchCalendarEvents = async () => {
     try {
       setIsLoadingEvents(true);
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/calendar-events?month=${currentMonth}&year=${currentYear}`
       );
       if (!response.ok) {
@@ -203,7 +203,7 @@ const Dashboard = () => {
   // Fetch recent activity logs
   const fetchRecentActivities = async () => {
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/activity-logs/recent?limit=5`
       );
       if (!response.ok) {
@@ -246,7 +246,7 @@ const Dashboard = () => {
       setTodayAttendance(attendance);
 
       // Get active employees count
-      const employeesResponse = await fetch(
+      const employeesResponse = await apiFetch(
         `${API_BASE_URL}/employees?status=active`
       );
       let activeEmployeesCount = 0;

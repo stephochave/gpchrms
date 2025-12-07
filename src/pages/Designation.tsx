@@ -62,7 +62,7 @@ const DesignationPage = () => {
         : `${API_BASE_URL}/designations`;
       const method = editingId ? "PUT" : "POST";
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",

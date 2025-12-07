@@ -3,6 +3,8 @@
  * Compares captured face with registered face to verify identity
  */
 
+import { apiFetch } from "./fetch";
+
 /**
  * Load images and convert to ImageData for comparison
  */
@@ -105,7 +107,7 @@ export const compareFacesServer = async (
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
   
   try {
-    const response = await fetch(`${API_BASE_URL}/attendance/verify-face`, {
+    const response = await apiFetch(`${API_BASE_URL}/attendance/verify-face`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
