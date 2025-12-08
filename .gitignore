@@ -29,3 +29,4 @@ package-lock.json
 ngrok.yml
 /server/src/uploads
 server/fix-database-schema.sql
+.env
