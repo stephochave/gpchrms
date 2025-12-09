@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { employeeStorage } from "@/lib/employeeStorage";
 import { Employee } from "@/types/employee";
 import { Department, Designation } from "@/lib/organizationStorage";
-import { Search, RotateCcw, Users, Plus } from "lucide-react";
+import { Search, RotateCcw, Users, Plus, Eye } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { generateDocumentByTemplate } from "@/lib/documentTemplates";
 import {
@@ -84,6 +85,7 @@ const EditField = ({
 );
 
 const InactiveEmployees = () => {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -569,7 +571,16 @@ const InactiveEmployees = () => {
                         <TableCell>FORMER EMPLOYEE</TableCell>
                         <TableCell>
                           <div className="flex justify-center">
-                            <div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                onClick={() => navigate(`/employees/${employee.id}`)}
+                                title="View Profile"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"

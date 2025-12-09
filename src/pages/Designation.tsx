@@ -4,30 +4,83 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Designation } from "@/lib/organizationStorage";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Pencil, Trash2, Briefcase, ListChecks } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
+interface Department {
+  id: number;
+  name: string;
+}
+
+interface DesignationWithDept extends Designation {
+  departmentId?: number;
+  departmentName?: string;
+}
+
 const DesignationPage = () => {
-  const [designations, setDesignations] = useState<Designation[]>([]);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  
+  // Check if user is a department head
+  const isDepartmentHead = user?.role === "admin" && user?.position && 
+                           (user.position.toLowerCase().includes("head") || 
+                            user.position.toLowerCase().includes("dean") || 
+                            user.position.toLowerCase().includes("principal") ||
+                            user.position.toLowerCase().includes("chairman") ||
+                            user.position.toLowerCase().includes("president"));
+  
+  const [designations, setDesignations] = useState<DesignationWithDept[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [designationName, setDesignationName] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDepartment, setEditingDepartment] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
 
-  const fetchDesignations = async () => {
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/departments`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch departments");
+      }
+      const data = await response.json();
+      setDepartments(data.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchDesignations = async (deptId?: string) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/designations`);
+      const url = deptId
+        ? `${API_BASE_URL}/designations?departmentId=${deptId}`
+        : `${API_BASE_URL}/designations`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to fetch designations");
       }
       const data = await response.json();
-      setDesignations(data.data);
+      const designationsWithDept = data.data.map((d: any) => ({
+        ...d,
+        departmentName:
+          departments.find((dept) => dept.id === d.departmentId)?.name ||
+          "Unknown",
+      }));
+      setDesignations(designationsWithDept);
     } catch (error) {
       console.error(error);
       toast({
@@ -41,8 +94,14 @@ const DesignationPage = () => {
   };
 
   useEffect(() => {
-    fetchDesignations();
+    fetchDepartments();
   }, []);
+
+  useEffect(() => {
+    if (departments.length > 0) {
+      fetchDesignations(selectedDepartment || undefined);
+    }
+  }, [selectedDepartment, departments]);
 
   const handleSave = async () => {
     if (!designationName.trim()) {
@@ -54,19 +113,32 @@ const DesignationPage = () => {
       return;
     }
 
+    if (!selectedDepartment && !editingDepartment) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please select a department",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const url = editingId
         ? `${API_BASE_URL}/designations/${editingId}`
         : `${API_BASE_URL}/designations`;
       const method = editingId ? "PUT" : "POST";
+      const deptId = editingDepartment || parseInt(selectedDepartment);
 
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: designationName.trim() }),
+        body: JSON.stringify({
+          name: designationName.trim(),
+          departmentId: deptId,
+        }),
       });
 
       if (!response.ok) {
@@ -82,7 +154,8 @@ const DesignationPage = () => {
       });
       setDesignationName("");
       setEditingId(null);
-      await fetchDesignations();
+      setEditingDepartment(null);
+      await fetchDesignations(selectedDepartment || undefined);
     } catch (error: any) {
       console.error(error);
       toast({
@@ -96,9 +169,10 @@ const DesignationPage = () => {
     }
   };
 
-  const handleEdit = (desig: Designation) => {
+  const handleEdit = (desig: DesignationWithDept) => {
     setDesignationName(desig.name);
     setEditingId(desig.id);
+    setEditingDepartment(desig.departmentId || null);
   };
 
   const handleDelete = async (id: string) => {
@@ -133,11 +207,19 @@ const DesignationPage = () => {
   const handleCancel = () => {
     setDesignationName("");
     setEditingId(null);
+    setEditingDepartment(null);
   };
 
-  const filteredDesignations = designations.filter((desig) =>
-    desig.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredDesignations = designations.filter((desig) => {
+    // Department heads can only see designations from their department
+    if (isDepartmentHead && user?.department) {
+      const designationDept = departments.find(d => String(d.id) === String(desig.departmentId));
+      if (!designationDept || designationDept.name !== user.department) {
+        return false;
+      }
+    }
+    return desig.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <DashboardLayoutNew>
@@ -150,7 +232,8 @@ const DesignationPage = () => {
           </p>
         </div>
 
-        {/* Add/Edit Designation Section */}
+        {/* Add/Edit Designation Section - Only for system admins */}
+        {!isDepartmentHead && (
         <Card className="border-2 shadow-lg">
           <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 border-b">
             <div className="flex items-center gap-3">
@@ -172,6 +255,34 @@ const DesignationPage = () => {
 
           <div className="p-6">
             <div className="max-w-2xl space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="department" className="text-base font-semibold">
+                  Department
+                </Label>
+                <Select
+                  value={editingDepartment ? editingDepartment.toString() : selectedDepartment}
+                  onValueChange={(value) => {
+                    if (editingId) {
+                      setEditingDepartment(parseInt(value));
+                    } else {
+                      setSelectedDepartment(value);
+                    }
+                  }}
+                  disabled={departments.length === 0}
+                >
+                  <SelectTrigger id="department" className="h-11">
+                    <SelectValue placeholder="Select a department..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id.toString()}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label
                   htmlFor="designationName"
@@ -213,6 +324,7 @@ const DesignationPage = () => {
             </div>
           </div>
         </Card>
+        )}
 
         {/* Designation List Section */}
         <Card className="border-2 shadow-lg">
@@ -229,14 +341,29 @@ const DesignationPage = () => {
                   </p>
                 </div>
               </div>
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search designations..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-10"
-                />
+              <div className="flex gap-2">
+                <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                  <SelectTrigger className="w-48 h-10">
+                    <SelectValue placeholder="Filter by department..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Departments</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id.toString()}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="relative w-72">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search designations..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 h-10"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -253,6 +380,9 @@ const DesignationPage = () => {
                       Designation Name
                     </th>
                     <th className="text-left py-4 px-6 font-semibold text-sm">
+                      Department
+                    </th>
+                    <th className="text-left py-4 px-6 font-semibold text-sm">
                       Created Date
                     </th>
                     <th className="text-center py-4 px-6 font-semibold text-sm">
@@ -264,7 +394,7 @@ const DesignationPage = () => {
                   {isLoading ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="py-12 text-center text-muted-foreground"
                       >
                         Loading designations...
@@ -281,36 +411,43 @@ const DesignationPage = () => {
                         </td>
                         <td className="py-4 px-6 font-medium">{desig.name}</td>
                         <td className="py-4 px-6 text-sm text-muted-foreground">
+                          {desig.departmentName || "N/A"}
+                        </td>
+                        <td className="py-4 px-6 text-sm text-muted-foreground">
                           {new Date(desig.createdAt).toLocaleDateString()}
                         </td>
                         <td className="py-4 px-6">
-                          <div className="flex gap-2 justify-center">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(desig)}
-                              className="h-9 gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(desig.id)}
-                              className="h-9 gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </Button>
-                          </div>
+                          {!isDepartmentHead ? (
+                            <div className="flex gap-2 justify-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(desig)}
+                                className="h-9 gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDelete(desig.id)}
+                                className="h-9 gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="py-12 text-center text-muted-foreground"
                       >
                         No designations found

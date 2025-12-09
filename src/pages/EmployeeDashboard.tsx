@@ -5,10 +5,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DialogDescription,
+  DialogHeader,
 } from "@/components/ui/dialog";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
@@ -39,6 +51,11 @@ const EmployeeDashboard = () => {
   const [activeCapture, setActiveCapture] = useState<"checkIn" | "checkOut" | null>(null);
   const [cameraError, setCameraError] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [selectedDateForLeave, setSelectedDateForLeave] = useState<number | null>(null);
+  const [leaveType, setLeaveType] = useState("sick");
+  const [leaveReason, setLeaveReason] = useState("");
+  const [isFilingLeave, setIsFilingLeave] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -272,6 +289,66 @@ const EmployeeDashboard = () => {
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   };
 
+  const handleFileLeave = async () => {
+    if (!selectedDateForLeave || !user?.employeeId || !user?.fullName) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Invalid leave request data",
+      });
+      return;
+    }
+
+    setIsFilingLeave(true);
+    try {
+      const leaveDate = new Date(currentYear, currentMonth, selectedDateForLeave).toISOString().split("T")[0];
+
+      const response = await fetch(`${API_BASE_URL}/leaves`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: user.employeeId,
+          employeeName: user.fullName,
+          leaveType: leaveType,
+          startDate: leaveDate,
+          endDate: leaveDate,
+          reason: leaveReason || undefined,
+          status: "pending",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to file leave request");
+      }
+
+      toast({
+        title: "Success",
+        description: `Leave request filed for ${leaveType.toUpperCase()} on ${new Date(leaveDate).toLocaleDateString()}`,
+      });
+
+      // Reset form
+      setLeaveDialogOpen(false);
+      setSelectedDateForLeave(null);
+      setLeaveType("sick");
+      setLeaveReason("");
+    } catch (error) {
+      console.error("Error filing leave", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to file leave request. Please try again.",
+      });
+    } finally {
+      setIsFilingLeave(false);
+    }
+  };
+
   const monthNames = [
     "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
     "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
@@ -294,7 +371,7 @@ const EmployeeDashboard = () => {
       <div className="h-full w-full -m-6">
         <Card className="rounded-none shadow-lg border-0 h-full">
           <CardContent className="p-8 h-full flex items-center">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full h-full">
               {/* Left: Employee Profile Card */}
               <div className="space-y-4 flex flex-col justify-center">
                 <div className="flex flex-col items-center text-center">
@@ -370,13 +447,17 @@ const EmployeeDashboard = () => {
                     return (
                       <button
                         key={day}
-                        onClick={() => setSelectedDate(day)}
+                        onClick={() => {
+                          setSelectedDate(day);
+                          setSelectedDateForLeave(day);
+                          setLeaveDialogOpen(true);
+                        }}
                         className={`aspect-square rounded-lg text-sm font-medium transition-colors ${
                           isSelected
                             ? "bg-primary text-primary-foreground"
                             : isToday
                             ? "bg-primary/20 text-primary font-bold"
-                            : "hover:bg-muted"
+                            : "hover:bg-muted hover:cursor-pointer"
                         }`}
                       >
                         {day}
@@ -385,67 +466,71 @@ const EmployeeDashboard = () => {
                   })}
                 </div>
               </div>
-
-              {/* Right: Sign In/Out Cards */}
-              <div className="space-y-4 flex flex-col justify-center">
-                {/* Sign In Time Card */}
-                <Card className="rounded-xl border-2 hover:border-primary/50 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col items-center text-center space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Camera className="w-8 h-8 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-lg mb-1">Sign In Time</h4>
-                        <p className="text-2xl font-bold text-primary mb-2">
-                          {todayAttendance.checkIn || "No Time In"}
-                        </p>
-                        <Button
-                          onClick={() => handleOpenCamera("checkIn")}
-                          disabled={!!todayAttendance.checkIn}
-                          className="w-full"
-                          variant={todayAttendance.checkIn ? "outline" : "default"}
-                        >
-                          {todayAttendance.checkIn ? "Already Signed In" : "Sign In"}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Sign Out Time Card */}
-                <Card className="rounded-xl border-2 hover:border-primary/50 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col items-center text-center space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Camera className="w-8 h-8 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-lg mb-1">Sign Out Time</h4>
-                        <p className="text-2xl font-bold text-primary mb-2">
-                          {todayAttendance.checkOut || "No Time Out"}
-                        </p>
-                        <Button
-                          onClick={() => handleOpenCamera("checkOut")}
-                          disabled={!!todayAttendance.checkOut || !todayAttendance.checkIn}
-                          className="w-full"
-                          variant={todayAttendance.checkOut ? "outline" : "default"}
-                        >
-                          {!todayAttendance.checkIn
-                            ? "Sign In First"
-                            : todayAttendance.checkOut
-                            ? "Already Signed Out"
-                            : "Sign Out"}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Leave Request Dialog */}
+      <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>File a Leave Request</DialogTitle>
+            <DialogDescription>
+              Submit a leave request for {selectedDateForLeave ? 
+                new Date(currentYear, currentMonth, selectedDateForLeave).toLocaleDateString() 
+                : "the selected date"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="leaveType">Leave Type</Label>
+              <Select value={leaveType} onValueChange={setLeaveType}>
+                <SelectTrigger id="leaveType">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sick">Sick Leave</SelectItem>
+                  <SelectItem value="vacation">Vacation Leave</SelectItem>
+                  <SelectItem value="personal">Personal Leave</SelectItem>
+                  <SelectItem value="bereavement">Bereavement Leave</SelectItem>
+                  <SelectItem value="emergency">Emergency Leave</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="leaveReason">Reason (Optional)</Label>
+              <Textarea
+                id="leaveReason"
+                placeholder="Please provide a reason for your leave request..."
+                value={leaveReason}
+                onChange={(e) => setLeaveReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setLeaveDialogOpen(false);
+                  setSelectedDateForLeave(null);
+                  setLeaveType("sick");
+                  setLeaveReason("");
+                }}
+                disabled={isFilingLeave}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleFileLeave}
+                disabled={isFilingLeave}
+              >
+                {isFilingLeave ? "Filing..." : "File Leave"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Camera Dialog */}
       {cameraIsOpen && (

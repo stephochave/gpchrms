@@ -55,6 +55,7 @@ const Profile = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [employeeData, setEmployeeData] = useState<any>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const buildDocumentEmployee = (): EmployeeRecord => {
     const today = new Date().toISOString().split("T")[0];
@@ -226,12 +227,80 @@ const Profile = () => {
     }
   }, [user]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Success",
-      description: "Profile updated successfully",
-    });
+
+    if (!employeeData?.id) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Employee data not found",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const token =
+        localStorage.getItem("hrms_token") || localStorage.getItem("token");
+
+      const response = await fetch(
+        `${API_BASE_URL}/employees/${employeeData.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            fullName,
+            email,
+            phone,
+            address,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update profile");
+      }
+
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      });
+
+      // Refresh employee data to show updated values
+      const refreshResponse = await fetch(
+        `${API_BASE_URL}/employees?employeeId=${user?.employeeId}`
+      );
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.data && refreshData.data.length > 0) {
+          const emp = refreshData.data[0];
+          setEmployeeData(emp);
+          setFullName(emp.fullName || user?.fullName || "");
+          setEmail(emp.email || user?.email || "");
+          setPhone(emp.phone || "");
+          setAddress(emp.address || "");
+        }
+      }
+    } catch (error) {
+      console.error("Save profile error", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Unable to update profile. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -530,9 +599,9 @@ const Profile = () => {
               />
             </div> */}
 
-            {/* <Button type="submit" className="px-8">
-              Save Changes
-            </Button> */}
+            <Button type="submit" className="px-8" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
           </form>
         </Card>
 

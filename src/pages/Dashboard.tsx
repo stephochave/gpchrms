@@ -66,6 +66,17 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Redirect department heads to employee dashboard
+  useEffect(() => {
+    if (user?.role === "admin" && user?.position &&
+        (user.position.toLowerCase().includes("head") || 
+         user.position.toLowerCase().includes("dean") || 
+         user.position.toLowerCase().includes("principal"))) {
+      navigate("/employee/dashboard", { replace: true });
+    }
+  }, [user, navigate]);
+
   const handleDocumentShortcut = (key: DocumentNavKey) => {
     navigate("/documents", { state: { openDialog: key } });
   };
