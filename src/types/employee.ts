@@ -35,6 +35,8 @@ export interface Employee {
   status: 'active' | 'inactive';
   archivedReason?: string;
   archivedDate?: string;
+  employmentCount?: number | null;
+  currentEmploymentPeriod?: number | null;
   createdAt: string;
   updatedAt: string;
 }

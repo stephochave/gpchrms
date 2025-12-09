@@ -133,6 +133,53 @@ const Documents = () => {
   const [activeTemplateKey, setActiveTemplateKey] =
     useState<DocumentTemplateKey | null>(null);
 
+  // Department head detection: admin role + head/dean/principal/chairman/president in position
+  const isDepartmentHead =
+    user?.role === "admin" &&
+    user?.position &&
+    (user.position.toLowerCase().includes("head") ||
+      user.position.toLowerCase().includes("dean") ||
+      user.position.toLowerCase().includes("principal") ||
+      user.position.toLowerCase().includes("chairman") ||
+      user.position.toLowerCase().includes("president"));
+
+  // Helper function to fetch and process documents
+  const fetchAndProcessDocuments = async () => {
+    try {
+      const [documentsRes, employeesRes, allDocsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
+        fetch(`${API_BASE_URL}/employees?status=active`),
+        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
+      ]);
+
+      if (!documentsRes.ok) {
+        throw new Error("Failed to fetch documents");
+      }
+
+      const documentsData = await documentsRes.json();
+      const allDocsData = await allDocsRes.json();
+      let employeesData: any[] = [];
+
+      if (employeesRes.ok) {
+        const empData = await employeesRes.json();
+        employeesData = empData.data || [];
+
+        // Restrict department heads to their own department
+        if (isDepartmentHead && user?.department) {
+          employeesData = employeesData.filter(
+            (emp: any) =>
+              String(emp.department || "").toLowerCase() ===
+              String(user.department).toLowerCase()
+          );
+        }
+
+        setEmployees(employeesData);
+      }
+
+      // Create employee map for names and files
+      const employeeMap = new Map(
+        employeesData.map((emp: any) => [emp.employeeId, emp])
+      );
   // Helper function to process employee documents
   const processEmployeeDocuments = (employeesData: any[], documentsData: any[]) => {
     const employeeMap = new Map(
@@ -172,8 +219,16 @@ const Documents = () => {
       }
     });
 
+      // Build allowed employee ids for department heads
+      const allowedEmployeeIds = isDepartmentHead
+        ? new Set(employeesData.map((emp: any) => emp.employeeId))
+        : null;
+
     // Then, add/update with documents from documents table
-    documentsData.forEach((doc: any) => {
+    (documentsData || []).forEach((doc: any) => {
+        if (allowedEmployeeIds && doc.employeeId && !allowedEmployeeIds.has(doc.employeeId)) {
+          return; // Skip documents outside the department for department heads
+        }
       if (doc.employeeId && employeeMap.has(doc.employeeId)) {
         if (!employeeDocs.has(doc.employeeId)) {
           const employee = employeeMap.get(doc.employeeId);
@@ -490,6 +545,20 @@ const Documents = () => {
                             variant: "destructive",
                             title: "Employee not found",
                             description: `No employee matched the ID ${generatorEmployeeId.trim()}.`,
+                          });
+                          return;
+                        }
+                        if (
+                          isDepartmentHead &&
+                          user?.department &&
+                          String(employee.department || "").toLowerCase() !==
+                            String(user.department).toLowerCase()
+                        ) {
+                          toast({
+                            variant: "destructive",
+                            title: "Access denied",
+                            description:
+                              "You can only generate documents for employees in your department.",
                           });
                           return;
                         }

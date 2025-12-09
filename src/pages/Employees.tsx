@@ -55,6 +55,7 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { EmploymentHistory } from "@/components/EmploymentHistory";
 
 const editFormDefault = {
   firstName: "",
@@ -160,6 +161,42 @@ const EMPLOYMENT_TYPES = [
 
 const employeeIdRegex = /^\d{2}-[A-Z]{2,4}-\d{1,5}$/;
 
+// Format employee ID by adding 25-GPC prefix if not present
+const formatEmployeeId = (id: string): string => {
+  const cleaned = id.trim().toUpperCase();
+  // If already has the full format, return as is
+  if (employeeIdRegex.test(cleaned)) {
+    return cleaned;
+  }
+  // If it starts with 25-GPC, return as is
+  if (cleaned.startsWith("25-GPC-")) {
+    return cleaned;
+  }
+  // Otherwise add 25-GPC prefix
+  return `25-GPC-${cleaned}`;
+};
+
+// Format email by adding @tgpc.edu.ph if not present
+const formatEmail = (email: string): string => {
+  const cleaned = email.trim().toLowerCase();
+  // If already has the domain, return as is
+  if (cleaned.includes("@")) {
+    return cleaned;
+  }
+  // Otherwise add the domain
+  return `${cleaned}@tgpc.edu.ph`;
+};
+
+// Auto-generate email from first and last name
+const generateEmail = (firstName: string, lastName: string): string => {
+  const first = firstName.trim().toLowerCase().replace(/\s+/g, '');
+  const last = lastName.trim().toLowerCase().replace(/\s+/g, '');
+  
+  if (!first || !last) return "";
+  
+  return `${first}${last}@tgpc.edu.ph`;
+};
+
 const validateEmployeeId = (id: string): boolean => {
   if (!id) return false;
   const parts = id.split("-");
@@ -179,6 +216,7 @@ const employeeSchema = z.object({
     .string()
     .trim()
     .min(1, "Employee ID is required")
+    .transform(formatEmployeeId)
     .refine((id) => validateEmployeeId(id), {
       message:
         "Employee ID must be in format: YY-SCHOOL-XXXXX (e.g., 25-GPC-12345). Year: 2 digits, School: 2-4 letters, Unique ID: 1-5 digits",
@@ -189,7 +227,15 @@ const employeeSchema = z.object({
   suffixName: z.string().trim().optional(),
   department: z.string().min(1, "Department is required"),
   designation: z.string().min(1, "Designation is required"),
-  email: z.string().trim().email("Invalid email").max(255),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .max(255)
+    .transform(formatEmail)
+    .refine((email) => email.includes("@"), {
+      message: "Invalid email format",
+    }),
   contactNumber: z.string().trim().min(1, "Contact number is required"),
   dateOfBirth: z.string().min(1, "Date of birth is required"),
   address: z.string().trim().min(1, "Address is required"),
@@ -251,6 +297,27 @@ const Employees = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  // Get designation options based on department
+  const getDesignationOptions = (dept?: string | null) => {
+    if (!dept) return [];
+    
+    // Find the department ID from the department name
+    const selectedDept = departments.find((d) => d.name === dept);
+    if (!selectedDept) return [];
+    
+    // Filter designations by department ID (ensure both are strings for comparison)
+    return designations.filter((d) => String(d.departmentId) === String(selectedDept.id));
+  };
+
+  const designationOptions = getDesignationOptions(formData.department);
+  const editDesignationOptions = getDesignationOptions(editForm.department);
+  const [cameraContext, setCameraContext] = useState<"add" | "edit">("add");
+  const [cameraError, setCameraError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
 
@@ -579,6 +646,15 @@ const Employees = () => {
     field: keyof typeof editFormDefault,
     value: string
   ) => {
+    // Auto-uppercase name fields
+    if (field === "firstName" || field === "middleName" || field === "lastName") {
+      value = value.toUpperCase();
+    }
+    // Auto-format employee ID
+    if (field === "employeeId") {
+      value = formatEmployeeId(value);
+    }
+    // Don't auto-format email here - will be done on blur
     setEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -960,6 +1036,15 @@ const Employees = () => {
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="h-8 w-8 p-0 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                              onClick={() => navigate(`/employees/${employee.id}`)}
+                              title="View Profile"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="h-8 w-8 p-0 text-primary hover:text-primary hover:bg-primary/10"
                               onClick={() => handleOpenEditDialog(employee)}
                               title="Edit Employee"
@@ -1051,9 +1136,11 @@ const Employees = () => {
               <EditField label="First Name *">
                 <Input
                   value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const firstName = e.target.value.toUpperCase();
+                    const email = generateEmail(firstName, formData.lastName);
+                    setFormData({ ...formData, firstName, email });
+                  }}
                   placeholder="Employee's First Name"
                 />
                 {formErrors.firstName && (
@@ -1065,9 +1152,11 @@ const Employees = () => {
               <EditField label="Middle Name *">
                 <Input
                   value={formData.middleName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, middleName: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const middleName = e.target.value.toUpperCase();
+                    // Middle name doesn't affect email, just update it
+                    setFormData({ ...formData, middleName });
+                  }}
                   placeholder="Employee's Middle Name"
                 />
                 {formErrors.middleName && (
@@ -1079,9 +1168,11 @@ const Employees = () => {
               <EditField label="Last Name *">
                 <Input
                   value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const lastName = e.target.value.toUpperCase();
+                    const email = generateEmail(formData.firstName, lastName);
+                    setFormData({ ...formData, lastName, email });
+                  }}
                   placeholder="Employee's Last Name"
                 />
                 {formErrors.lastName && (
@@ -1183,14 +1274,20 @@ const Employees = () => {
                   </p>
                 )}
               </EditField>
-              <EditField label="Email *">
+              <EditField label="Email * (auto-generated)">
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  placeholder="email@gmail.com"
+                  onBlur={(e) => {
+                    const input = e.target.value;
+                    // Format only when user leaves the field (if they manually edited)
+                    const formatted = input ? formatEmail(input) : "";
+                    setFormData({ ...formData, email: formatted })
+                  }}
+                  placeholder="Auto-generated from name"
                 />
                 {formErrors.email && (
                   <p className="text-sm text-destructive">{formErrors.email}</p>
@@ -1203,10 +1300,14 @@ const Employees = () => {
               <EditField label="Employee ID *">
                 <Input
                   value={formData.employeeId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, employeeId: e.target.value })
-                  }
-                  placeholder="Example: 25-GPC-012345"
+                  onChange={(e) => {
+                    const input = e.target.value.toUpperCase();
+                    // Show formatted version in real-time
+                    const formatted = input ? formatEmployeeId(input) : "";
+                    // Auto-set password to the employee ID
+                    setFormData({ ...formData, employeeId: formatted, password: formatted })
+                  }}
+                  placeholder="Example: 012345 (will auto-format to 25-GPC-012345)"
                 />
                 {formErrors.employeeId && (
                   <p className="text-sm text-destructive">
@@ -1239,23 +1340,36 @@ const Employees = () => {
                 )}
               </EditField>
               <EditField label="Designation *">
-                <Select
-                  value={formData.designation}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, designation: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Designation" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {designations.map((desig) => (
-                      <SelectItem key={desig.id} value={desig.name}>
-                        {desig.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {!formData.department ? (
+                  <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
+                    Please select a department first
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.designation}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, designation: value })
+                    }
+                    disabled={designationOptions.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue 
+                        placeholder={
+                          designationOptions.length === 0 
+                            ? "No designations available for this department"
+                            : "Select Designation"
+                        } 
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {designationOptions.map((desig) => (
+                        <SelectItem key={desig.id} value={desig.name}>
+                          {desig.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 {formErrors.designation && (
                   <p className="text-sm text-destructive">
                     {formErrors.designation}
@@ -1413,7 +1527,7 @@ const Employees = () => {
                   </SelectContent>
                 </Select>
               </EditField>
-              <EditField label="Password">
+              <EditField label="Password (Auto-generated from Employee ID)">
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
@@ -1421,8 +1535,9 @@ const Employees = () => {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    placeholder="Employee's password"
-                    className="pr-10"
+                    placeholder="Auto-generated from Employee ID"
+                    className="pr-10 bg-muted"
+                    readOnly
                   />
                   <button
                     type="button"
@@ -1437,6 +1552,9 @@ const Employees = () => {
                     )}
                   </button>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Password is automatically set to the Employee ID for initial login. Employee can change it later.
+                </p>
               </EditField>
             </section>
 
@@ -1515,25 +1633,30 @@ const Employees = () => {
                 <EditField label="First Name">
                   <Input
                     value={editForm.firstName}
-                    onChange={(e) =>
-                      handleEditFieldChange("firstName", e.target.value)
-                    }
+                    onChange={(e) => {
+                      const firstName = e.target.value.toUpperCase();
+                      const email = generateEmail(firstName, editForm.lastName);
+                      setEditForm((prev) => ({ ...prev, firstName, email }));
+                    }}
                   />
                 </EditField>
                 <EditField label="Middle Name">
                   <Input
                     value={editForm.middleName}
-                    onChange={(e) =>
-                      handleEditFieldChange("middleName", e.target.value)
-                    }
+                    onChange={(e) => {
+                      const middleName = e.target.value.toUpperCase();
+                      setEditForm((prev) => ({ ...prev, middleName }));
+                    }}
                   />
                 </EditField>
                 <EditField label="Last Name">
                   <Input
                     value={editForm.lastName}
-                    onChange={(e) =>
-                      handleEditFieldChange("lastName", e.target.value)
-                    }
+                    onChange={(e) => {
+                      const lastName = e.target.value.toUpperCase();
+                      const email = generateEmail(editForm.firstName, lastName);
+                      setEditForm((prev) => ({ ...prev, lastName, email }));
+                    }}
                   />
                 </EditField>
                 <EditField label="Suffix Name">
@@ -1613,6 +1736,11 @@ const Employees = () => {
                     onChange={(e) =>
                       handleEditFieldChange("email", e.target.value)
                     }
+                    onBlur={(e) => {
+                      const input = e.target.value;
+                      const formatted = input ? formatEmail(input) : "";
+                      setEditForm((prev) => ({ ...prev, email: formatted }));
+                    }}
                   />
                 </EditField>
                 <EditField label="Employee ID">
@@ -1643,23 +1771,36 @@ const Employees = () => {
                   </Select>
                 </EditField>
                 <EditField label="Designation">
-                  <Select
-                    value={editForm.designation}
-                    onValueChange={(value) =>
-                      handleEditFieldChange("designation", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Designation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {designations.map((desig) => (
-                        <SelectItem key={desig.id} value={desig.name}>
-                          {desig.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {!editForm.department ? (
+                    <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
+                      Please select a department first
+                    </div>
+                  ) : (
+                    <Select
+                      value={editForm.designation}
+                      onValueChange={(value) =>
+                        handleEditFieldChange("designation", value)
+                      }
+                      disabled={editDesignationOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue 
+                          placeholder={
+                            editDesignationOptions.length === 0 
+                              ? "No designations available for this department"
+                              : "Select Designation"
+                          } 
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {editDesignationOptions.map((desig) => (
+                          <SelectItem key={desig.id} value={desig.name}>
+                            {desig.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </EditField>
                 <EditField label="Role">
                   <Select
@@ -1996,6 +2137,20 @@ const Employees = () => {
                 </Button>
               </div>
             </form>
+
+            {/* Employment History Section */}
+            {selectedEmployee && (
+              <div className="mt-6 border-t pt-6">
+                <EmploymentHistory
+                  employeeId={selectedEmployee.employeeId}
+                  isAdmin={isAdmin}
+                  onHistoryUpdate={() => {
+                    // Refresh employee data if needed
+                    fetchEmployees();
+                  }}
+                />
+              </div>
+            )}
           </>
         </DialogContent>
       </Dialog>

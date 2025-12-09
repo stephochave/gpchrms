@@ -108,6 +108,10 @@ import notificationRoutes from "./routes/notifications";
 import attendanceRoutes from "./routes/attendance";
 import settingsRoutes from "./routes/settings";
 import leaveRoutes from "./routes/leaves";
+import loyaltyRoutes, { initializeLoyaltyTable } from "./routes/loyalty";
+import employmentHistoryRoutes, {
+  initializeEmploymentHistoryTable,
+} from "./routes/employmentHistory";
 import { autoMarkAbsentForToday } from "./utils/attendanceAutoAbsent";
 
 const app = express();
@@ -165,7 +169,13 @@ app.use("/documents", documentRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/attendance", attendanceRoutes);
 app.use("/leaves", leaveRoutes);
+app.use("/loyalty", loyaltyRoutes);
+app.use("/employment-history", employmentHistoryRoutes);
 app.use("/settings", settingsRoutes);
+
+// Initialize loyalty table on startup
+initializeLoyaltyTable();
+initializeEmploymentHistoryTable();
 
 // Global error handler
 app.use(

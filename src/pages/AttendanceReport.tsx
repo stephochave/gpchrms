@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from '@/lib/fetch';
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,14 @@ interface Employee {
 }
 
 const AttendanceReport = () => {
+  const { user } = useAuth();
+  
+  // Determine if user is a department head
+  const isDepartmentHead = user?.role === "admin" && user?.position &&
+                           (user.position.toLowerCase().includes("head") || 
+                            user.position.toLowerCase().includes("dean") || 
+                            user.position.toLowerCase().includes("principal"));
+
   // Set default date to today for easy daily report generation
   const today = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(today);
@@ -161,9 +170,20 @@ const AttendanceReport = () => {
   const fetchReportsData = useCallback(async () => {
     try {
       setIsLoading(true);
+      
+      // Build API URLs with department filtering for department heads
+      let attendanceUrl = `${API_BASE_URL}/attendance`;
+      let employeesUrl = `${API_BASE_URL}/employees?status=active`;
+      
+      if (isDepartmentHead && user?.department) {
+        employeesUrl += `&department=${user.department}`;
+      }
+      
       const [attendanceRes, employeesRes] = await Promise.all([
         apiFetch(`${API_BASE_URL}/attendance`),
         apiFetch(`${API_BASE_URL}/employees?status=active`),
+        fetch(attendanceUrl),
+        fetch(employeesUrl),
       ]);
 
       const attendancePayload = attendanceRes.ok
@@ -173,10 +193,19 @@ const AttendanceReport = () => {
         ? (await employeesRes.json()).data || []
         : [];
 
-      if (attendancePayload.length === 0 || employeePayload.length === 0) {
+      // Filter attendance to only include employees from the department (for department heads)
+      let filteredAttendance = attendancePayload;
+      if (isDepartmentHead && employeePayload.length > 0) {
+        const employeeIds = new Set(employeePayload.map((emp: Employee) => emp.employeeId));
+        filteredAttendance = attendancePayload.filter((att: Attendance) =>
+          employeeIds.has(att.employeeId)
+        );
+      }
+
+      if (filteredAttendance.length === 0 || employeePayload.length === 0) {
         applySampleData();
       } else {
-        setAttendance(attendancePayload);
+        setAttendance(filteredAttendance);
         setEmployees(employeePayload);
         setUsingSampleData(false);
       }
@@ -192,7 +221,7 @@ const AttendanceReport = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [API_BASE_URL, toast]);
+  }, [API_BASE_URL, toast, isDepartmentHead, user?.department]);
 
   useEffect(() => {
     fetchReportsData();
@@ -466,9 +495,13 @@ const AttendanceReport = () => {
         <Card className="shadow-sm border-border">
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <CardTitle className="text-2xl">Attendance Report</CardTitle>
+              <CardTitle className="text-2xl">
+                {isDepartmentHead ? `${user?.department} - Attendance Report` : "Attendance Report"}
+              </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Generate custom date-range summaries
+                {isDepartmentHead 
+                  ? "Generate custom date-range summaries for your department"
+                  : "Generate custom date-range summaries"}
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">

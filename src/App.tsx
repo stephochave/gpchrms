@@ -19,6 +19,8 @@ import AttendanceHistory from "./pages/AttendanceHistory";
 import AddAttendance from "./pages/AddAttendance";
 import AttendanceReport from "./pages/AttendanceReport";
 import Leaves from "./pages/Leaves";
+import LeaveReports from "./pages/LeaveReports";
+import EmployeeProfile from "./pages/EmployeeProfile";
 import Documents from "./pages/Documents";
 import EmployeeDocuments from "./pages/EmployeeDocuments";
 import Templates from "./pages/Templates";
@@ -32,6 +34,7 @@ import NotFound from "./pages/NotFound";
 import Index from "./pages/Index";
 import GuardDashboard from "./pages/GuardDashboard";
 import GenerateQRCodes from "./pages/GenerateQRCodes";
+import Loyalty from "./pages/Loyalty";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +94,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <Employees />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/employees/:id" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <EmployeeProfile />
                 </ProtectedRoute>
               } 
             />
@@ -167,6 +178,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/leave-reports" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <LeaveReports />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/documents" 
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
@@ -235,6 +254,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/loyalty" 
+              element={
+                <ProtectedRoute>
+                  <Loyalty />
                 </ProtectedRoute>
               } 
             />

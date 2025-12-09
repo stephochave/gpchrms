@@ -9,27 +9,40 @@ const router = Router();
 interface DbDesignation extends RowDataPacket {
   id: number;
   name: string;
+  department_id: number;
   created_at: string;
   updated_at: string;
 }
 
 const designationSchema = z.object({
   name: z.string().min(1, 'Designation name is required').max(120),
+  departmentId: z.number().int().positive('Department is required'),
 });
 
 const mapDesignationRow = (row: DbDesignation) => ({
   id: String(row.id),
   name: row.name,
+  departmentId: String(row.department_id),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
-// GET all designations
+// GET all designations or filter by department
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await pool.execute<DbDesignation[]>(
-      'SELECT id, name, created_at, updated_at FROM designations ORDER BY name ASC'
-    );
+    const { departmentId } = req.query;
+
+    let query = 'SELECT id, name, department_id, created_at, updated_at FROM designations';
+    const params: any[] = [];
+
+    if (departmentId) {
+      query += ' WHERE department_id = ?';
+      params.push(departmentId);
+    }
+
+    query += ' ORDER BY name ASC';
+
+    const [rows] = await pool.execute<DbDesignation[]>(query, params);
 
     return res.json({
       data: rows.map(mapDesignationRow),
@@ -50,17 +63,27 @@ router.post('/', async (req, res) => {
     });
   }
 
-  const { name } = parseResult.data;
+  const { name, departmentId } = parseResult.data;
 
   try {
-    const [result] = await pool.execute(
-      'INSERT INTO designations (name) VALUES (?)',
-      [name]
+    // Verify department exists
+    const [deptRows] = await pool.execute<any[]>(
+      'SELECT id FROM departments WHERE id = ?',
+      [departmentId]
+    );
+
+    if ((deptRows as any[]).length === 0) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    const [result] = await pool.execute<any>(
+      'INSERT INTO designations (name, department_id) VALUES (?, ?)',
+      [name, departmentId]
     );
 
     const insertId = (result as any).insertId;
     const [rows] = await pool.execute<DbDesignation[]>(
-      'SELECT id, name, created_at, updated_at FROM designations WHERE id = ?',
+      'SELECT id, name, department_id, created_at, updated_at FROM designations WHERE id = ?',
       [insertId]
     );
 
@@ -71,7 +94,7 @@ router.post('/', async (req, res) => {
       resourceType: 'Designation',
       resourceId: String(insertId),
       resourceName: name,
-      description: `Designation "${name}" was created`,
+      description: `Designation "${name}" was created in department ID ${departmentId}`,
       ipAddress: getClientIp(req),
       status: 'success',
     });
@@ -87,11 +110,11 @@ router.post('/', async (req, res) => {
         actionType: 'CREATE',
         resourceType: 'Designation',
         resourceName: name,
-        description: `Failed to create designation: Designation with this name already exists`,
+        description: `Failed to create designation: Designation with this name already exists in this department`,
         ipAddress: getClientIp(req),
         status: 'failed',
       });
-      return res.status(409).json({ message: 'Designation with this name already exists' });
+      return res.status(409).json({ message: 'Designation with this name already exists in this department' });
     }
     console.error('Error creating designation', error);
     await logActivity({
@@ -117,30 +140,41 @@ router.put('/:id', async (req, res) => {
     });
   }
 
-  const { name } = parseResult.data;
+  const { name, departmentId } = parseResult.data;
   const { id } = req.params;
 
   try {
-    await pool.execute(
-      'UPDATE designations SET name = ? WHERE id = ?',
-      [name, id]
+    // Verify department exists
+    const [deptRows] = await pool.execute<any[]>(
+      'SELECT id FROM departments WHERE id = ?',
+      [departmentId]
     );
 
-    const [rows] = await pool.execute<DbDesignation[]>(
-      'SELECT id, name, created_at, updated_at FROM designations WHERE id = ?',
+    if ((deptRows as any[]).length === 0) {
+      return res.status(404).json({ message: 'Department not found' });
+    }
+
+    // Get old designation for logging
+    const [oldRows] = await pool.execute<DbDesignation[]>(
+      'SELECT name, department_id FROM designations WHERE id = ?',
       [id]
     );
 
-    if (rows.length === 0) {
+    if (oldRows.length === 0) {
       return res.status(404).json({ message: 'Designation not found' });
     }
 
-    // Get old name for logging
-    const [oldRows] = await pool.execute<DbDesignation[]>(
-      'SELECT name FROM designations WHERE id = ?',
+    const oldName = oldRows[0].name;
+
+    await pool.execute(
+      'UPDATE designations SET name = ?, department_id = ? WHERE id = ?',
+      [name, departmentId, id]
+    );
+
+    const [rows] = await pool.execute<DbDesignation[]>(
+      'SELECT id, name, department_id, created_at, updated_at FROM designations WHERE id = ?',
       [id]
     );
-    const oldName = oldRows[0]?.name;
 
     // Log activity
     await logActivity({
@@ -149,7 +183,7 @@ router.put('/:id', async (req, res) => {
       resourceType: 'Designation',
       resourceId: id,
       resourceName: name,
-      description: `Designation "${oldName || 'Unknown'}" was updated to "${name}"`,
+      description: `Designation "${oldName || 'Unknown'}" was updated to "${name}" in department ID ${departmentId}`,
       ipAddress: getClientIp(req),
       status: 'success',
     });
@@ -165,11 +199,11 @@ router.put('/:id', async (req, res) => {
         actionType: 'UPDATE',
         resourceType: 'Designation',
         resourceId: id,
-        description: `Failed to update designation: Designation with this name already exists`,
+        description: `Failed to update designation: Designation with this name already exists in this department`,
         ipAddress: getClientIp(req),
         status: 'failed',
       });
-      return res.status(409).json({ message: 'Designation with this name already exists' });
+      return res.status(409).json({ message: 'Designation with this name already exists in this department' });
     }
     console.error('Error updating designation', error);
     await logActivity({
@@ -192,10 +226,16 @@ router.delete('/:id', async (req, res) => {
   try {
     // Get designation name before deletion
     const [desigRows] = await pool.execute<DbDesignation[]>(
-      'SELECT name FROM designations WHERE id = ?',
+      'SELECT name, department_id FROM designations WHERE id = ?',
       [id]
     );
-    const desigName = desigRows[0]?.name;
+    
+    if (desigRows.length === 0) {
+      return res.status(404).json({ message: 'Designation not found' });
+    }
+
+    const desigName = desigRows[0].name;
+    const deptId = desigRows[0].department_id;
 
     const [result] = await pool.execute(
       'DELETE FROM designations WHERE id = ?',
@@ -214,7 +254,7 @@ router.delete('/:id', async (req, res) => {
       resourceType: 'Designation',
       resourceId: id,
       resourceName: desigName || 'Unknown',
-      description: `Designation "${desigName || 'Unknown'}" was deleted`,
+      description: `Designation "${desigName || 'Unknown'}" was deleted from department ID ${deptId}`,
       ipAddress: getClientIp(req),
       status: 'success',
     });

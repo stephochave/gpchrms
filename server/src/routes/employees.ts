@@ -104,6 +104,8 @@ const mapEmployeeRow = (row: DbEmployee) => ({
   status: row.status,
   archivedReason: row.archived_reason,
   archivedAt: row.archived_at,
+  employmentCount: row.employment_count ?? null,
+  currentEmploymentPeriod: row.current_employment_period ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -133,7 +135,7 @@ router.get("/", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, qr_code_data, qr_code_secret, qr_code_generated_at, status,
+              service_record_file, file_201, registered_face_file, status,
               archived_reason, archived_at, created_at, updated_at
          FROM employees
          ${whereClause}
@@ -159,7 +161,7 @@ router.get("/:id", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, qr_code_data, qr_code_secret, qr_code_generated_at, status,
+              service_record_file, file_201, registered_face_file, status,
               archived_reason, archived_at, created_at, updated_at, password_hash
          FROM employees
          WHERE id = ?
@@ -351,6 +353,28 @@ router.post("/", async (req, res) => {
           ]
         );
       }
+
+      // Create initial employment history record
+      await connection.execute(
+        `INSERT INTO employment_history 
+         (employee_id, employment_period, date_hired, date_ended, employment_type, department, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          employeeId,
+          1,
+          dateHired,
+          dateOfLeaving || null,
+          employmentType,
+          department,
+          position,
+        ]
+      );
+
+      // Set employment_count and current_employment_period for the employee
+      await connection.execute(
+        `UPDATE employees SET employment_count = 1, current_employment_period = 1 WHERE employee_id = ?`,
+        [employeeId]
+      );
 
       await connection.commit();
     } catch (transactionError) {

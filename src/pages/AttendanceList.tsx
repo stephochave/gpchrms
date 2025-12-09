@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -185,6 +186,8 @@ const AttendanceList = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [usingSampleData, setUsingSampleData] = useState(false);
+  const [searchParams] = useSearchParams();
+  const viewMode = searchParams.get("view") || "personal"; // "personal" or "department"
   const { toast } = useToast();
   const { user } = useAuth();
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -199,6 +202,18 @@ const AttendanceList = () => {
   const [editCheckOut, setEditCheckOut] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [reportFilter, setReportFilter] = useState<"daily" | "weekly" | "monthly">("monthly");
+
+  // Determine user type
+  // System Admin: role === "admin" AND has no specific head/dean/principal position
+  // Department Head: role === "admin" AND position contains "head"/"dean"/"principal"
+  // Employee: role === "employee"
+  const isDepartmentHead = user?.role === "admin" && user?.position && 
+    (user.position.toLowerCase().includes("head") || 
+     user.position.toLowerCase().includes("dean") || 
+     user.position.toLowerCase().includes("principal"));
+  
+  const isSystemAdmin = user?.role === "admin" && !isDepartmentHead;
 
   const applySampleData = () => {
     setAttendance(buildSampleAttendance());
@@ -216,6 +231,40 @@ const AttendanceList = () => {
         ]);
 
         if (!attendanceRes.ok || !employeesRes.ok) {
+        
+        if (!user?.employeeId) {
+          applySampleData();
+          return;
+        }
+
+        // Determine if user is a department head (admin with specific position)
+        const isDepartmentHead = user?.role === "admin" && user?.position && 
+          (user.position.toLowerCase().includes("head") || 
+           user.position.toLowerCase().includes("dean") || 
+           user.position.toLowerCase().includes("principal"));
+
+        // Build attendance fetch URL based on user role
+        let attendanceUrl = `${API_BASE_URL}/attendance`;
+        let employeeUrl = `${API_BASE_URL}/employees`;
+
+        if (user?.role === "employee") {
+          // Employees see only their own attendance
+          attendanceUrl += `?employeeId=${user.employeeId}`;
+          employeeUrl += `?employeeId=${user.employeeId}`;
+        } else if (isDepartmentHead && user?.department) {
+          // Department heads see their own department's attendance
+          employeeUrl += `?department=${user.department}&status=active`;
+        } else {
+          // Super admins see all active employees
+          employeeUrl += `?status=active`;
+        }
+
+        const [attendanceRes, employeeRes] = await Promise.all([
+          fetch(attendanceUrl),
+          fetch(employeeUrl),
+        ]);
+
+        if (!attendanceRes.ok || !employeeRes.ok) {
           applySampleData();
           return;
         }
@@ -223,10 +272,10 @@ const AttendanceList = () => {
         const attendanceData = await attendanceRes.json();
         let attendanceRecords = attendanceData.data || [];
 
-        const employeesData = await employeesRes.json();
-        const activeEmployees = employeesData.data || [];
+        const employeeData = await employeeRes.json();
+        const employees = employeeData.data || [];
 
-        if (attendanceRecords.length === 0 || activeEmployees.length === 0) {
+        if (employees.length === 0) {
           applySampleData();
           return;
         }
@@ -239,7 +288,7 @@ const AttendanceList = () => {
         // The backend will automatically update records every minute
         
         setAttendance(attendanceRecords);
-        setEmployees(activeEmployees);
+        setEmployees(employees);
         setUsingSampleData(false);
       } catch (error) {
         console.error("Error fetching data", error);
@@ -259,18 +308,64 @@ const AttendanceList = () => {
 
     fetchData();
 
-    
-    const interval = setInterval(fetchData, 300000); // 5 minutes
+    // Refresh every minute
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
-  }, [toast, usingSampleData]);
+  }, [toast, usingSampleData, user?.employeeId, user?.role, user?.position, user?.department]);
+
+  const getDateRangeForFilter = (): { startDate: Date; endDate: Date } => {
+    const today = new Date();
+    const endDate = new Date(today);
+
+    if (reportFilter === "daily") {
+      const startDate = new Date(today);
+      return { startDate, endDate };
+    } else if (reportFilter === "weekly") {
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - today.getDay());
+      return { startDate, endDate };
+    } else {
+      // monthly
+      const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { startDate, endDate };
+    }
+  };
+
+  const isDateInRange = (dateStr: string, startDate: Date, endDate: Date): boolean => {
+    const date = new Date(dateStr);
+    return date >= startDate && date <= endDate;
+  };
 
   const departmentRecords = useMemo(() => {
     const employeeMap = new Map(employees.map((emp) => [emp.employeeId, emp]));
+    const { startDate, endDate } = getDateRangeForFilter();
+
+    // Filter attendance based on user role and date range
+    let filteredAttendance = attendance;
+    
+    if (isSystemAdmin) {
+      // System admins see ALL records
+      filteredAttendance = attendance.filter((att) => isDateInRange(att.date, startDate, endDate));
+    } else if (isDepartmentHead && user?.department) {
+      // Department heads see records of OTHER employees in their department (excluding their own records)
+      filteredAttendance = attendance.filter((att) => {
+        const employee = employeeMap.get(att.employeeId);
+        return employee?.department === user.department && 
+               att.employeeId !== user?.employeeId && 
+               isDateInRange(att.date, startDate, endDate);
+      });
+    } else {
+      // Regular employees see only their own records
+      filteredAttendance = attendance.filter(
+        (att) => att.employeeId === user?.employeeId && isDateInRange(att.date, startDate, endDate)
+      );
+    }
+    // Regular admins see all records (no filter needed)
 
     // Group attendance by department and date
     const grouped = new Map<string, Map<string, AttendanceRecord[]>>();
 
-    attendance.forEach((att) => {
+    filteredAttendance.forEach((att) => {
       const employee = employeeMap.get(att.employeeId);
       const dept = employee?.department || "Unassigned";
       const date = att.date;
@@ -335,11 +430,12 @@ const AttendanceList = () => {
     const sections: DepartmentRecord[] = [];
     grouped.forEach((deptMap, department) => {
       deptMap.forEach((records, date) => {
-        const filtered = records.filter(
+        let filtered = records.filter(
           (rec) =>
             rec.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             rec.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
         );
+
         if (filtered.length > 0) {
           sections.push({ department, date, records: filtered });
         }
@@ -352,9 +448,106 @@ const AttendanceList = () => {
     );
 
     return sections;
-  }, [searchTerm, attendance, employees]);
+  }, [searchTerm, attendance, employees, user?.role, user?.employeeId, user?.position, user?.department, reportFilter]);
+
+  // Separate personal records for department heads
+  const personalRecords = useMemo(() => {
+    if (!isDepartmentHead) return [];
+    
+    const employeeMap = new Map(employees.map((emp) => [emp.employeeId, emp]));
+    const { startDate, endDate } = getDateRangeForFilter();
+
+    // Get only the department head's personal records
+    const filteredAttendance = attendance.filter(
+      (att) => att.employeeId === user?.employeeId && isDateInRange(att.date, startDate, endDate)
+    );
+
+    const grouped = new Map<string, Map<string, AttendanceRecord[]>>();
+
+    filteredAttendance.forEach((att) => {
+      const employee = employeeMap.get(att.employeeId);
+      const dept = employee?.department || "Unassigned";
+      const date = att.date;
+
+      if (!grouped.has(dept)) {
+        grouped.set(dept, new Map());
+      }
+
+      const deptMap = grouped.get(dept)!;
+      if (!deptMap.has(date)) {
+        deptMap.set(date, []);
+      }
+
+      const statusMap: Record<string, string> = {
+        present: "Present",
+        absent: "Absent",
+        late: "Late",
+        "half-day": "Half Day",
+        leave: "Leave",
+      };
+
+      const formatTime = (time: string) => {
+        if (!time) return "-";
+        const [hours, minutes] = time.split(":");
+        const hour = parseInt(hours, 10);
+        const ampm = hour >= 12 ? "PM" : "AM";
+        const displayHour = hour % 12 || 12;
+        return `${displayHour}:${minutes} ${ampm}`;
+      };
+
+      let statusText = statusMap[att.status] || att.status;
+      if (att.checkIn && (att.status === "late" || att.status === "present")) {
+        const checkInTime = new Date(`2000-01-01T${att.checkIn}`);
+        const expectedTime = new Date("2000-01-01T08:11");
+        const minutesLate = Math.floor(
+          (checkInTime.getTime() - expectedTime.getTime()) / 60000
+        );
+
+        if (minutesLate > 0) {
+          statusText = `Late (${minutesLate} mins)`;
+        } else if (att.status === "late") {
+          statusText = "Late";
+        }
+      }
+
+      deptMap.get(date)!.push({
+        name: att.employeeName || employee?.fullName || "Unknown",
+        type: employee?.position || "Regular",
+        signIn: formatTime(att.checkIn || ""),
+        signOut: formatTime(att.checkOut || ""),
+        status: statusText,
+        employeeId: att.employeeId,
+        attendanceId: att.id,
+        rawStatus: att.status,
+        rawCheckIn: att.checkIn || "",
+        rawCheckOut: att.checkOut || "",
+      });
+    });
+
+    const sections: DepartmentRecord[] = [];
+    grouped.forEach((deptMap, department) => {
+      deptMap.forEach((records, date) => {
+        let filtered = records.filter(
+          (rec) =>
+            rec.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            rec.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        if (filtered.length > 0) {
+          sections.push({ department, date, records: filtered });
+        }
+      });
+    });
+
+    sections.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    return sections;
+  }, [searchTerm, attendance, employees, user?.employeeId, reportFilter, isDepartmentHead, user?.role]); // Fixed dependency array
 
   const handleEditClick = (record: AttendanceRecord, date: string) => {
+    // Only admins can edit attendance records
     if (user?.role !== "admin") {
       toast({
         variant: "destructive",
@@ -524,14 +717,28 @@ const AttendanceList = () => {
                 </p>
               </div>
             </div>
-            <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or ID"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or ID"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {isDepartmentHead && (
+                <Select value={reportFilter} onValueChange={(value: any) => setReportFilter(value)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardHeader>
           {usingSampleData && (
@@ -543,22 +750,62 @@ const AttendanceList = () => {
           )}
 
           <div className="divide-y">
-            {departmentRecords.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-muted-foreground">
-                  No attendance records found.
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Add attendance records to see them here.
-                </p>
-              </div>
-            ) : (
-              departmentRecords.map((dept, sectionIndex) => (
-                <div
-                  key={`${dept.department}-${dept.date}-${sectionIndex}`}
-                  className="py-6 px-0 space-y-4"
-                >
-                  <div className="px-6 flex items-center justify-between flex-wrap gap-3">
+            {isDepartmentHead && personalRecords.length > 0 && (viewMode === "personal" || !viewMode) && (
+              <div className="py-6 px-6 space-y-4 bg-blue-50">
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-primary">My Personal Attendance</h3>
+                    <p className="text-sm text-muted-foreground">Your own attendance records</p>
+                  </div>
+                  <Button
+                    className="rounded-full px-5"
+                    onClick={() => {
+                      const csvRows: string[] = [];
+                      csvRows.push(
+                        "Employee Name,Employee ID,Employee Type,Date,Sign In Time,Sign Out Time,Attendance Status"
+                      );
+                      personalRecords.forEach((dept) => {
+                        dept.records.forEach((rec) => {
+                          csvRows.push(
+                            `"${rec.name}","${rec.employeeId}","${
+                              rec.type
+                            }","${new Date(dept.date).toLocaleDateString()}","${
+                              rec.signIn
+                            }","${rec.signOut}","${rec.status}"`
+                          );
+                        });
+                      });
+                      const csvContent = csvRows.join("\n");
+                      const blob = new Blob([csvContent], {
+                        type: "text/csv;charset=utf-8;",
+                      });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute("href", url);
+                      link.setAttribute(
+                        "download",
+                        `my_attendance_${reportFilter}_${new Date().toISOString().split('T')[0]}.csv`
+                      );
+                      link.style.visibility = "hidden";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast({
+                        title: "Report Generated",
+                        description: `CSV exported for your personal attendance (${reportFilter})`,
+                      });
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Generate Report
+                  </Button>
+                </div>
+
+                {personalRecords.map((dept, sectionIndex) => (
+                  <div
+                    key={`personal-${dept.department}-${dept.date}-${sectionIndex}`}
+                    className="space-y-4"
+                  >
                     <div>
                       <p className="uppercase text-xs font-semibold text-muted-foreground">
                         {dept.department}
@@ -571,13 +818,65 @@ const AttendanceList = () => {
                         })}
                       </p>
                     </div>
-                    <Button
-                      className="rounded-full px-5"
-                      onClick={() => {
-                        const csvRows: string[] = [];
-                        csvRows.push(
-                          "Employee Name,Employee ID,Employee Type,Date,Sign In Time,Sign Out Time,Attendance Status"
-                        );
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-t border-border/60">
+                        <thead className="bg-primary text-white">
+                          <tr>
+                            <th className="py-3 px-4 text-left font-medium">Employee Name</th>
+                            <th className="py-3 px-4 text-left font-medium">Employee Type</th>
+                            <th className="py-3 px-4 text-left font-medium">Date</th>
+                            <th className="py-3 px-4 text-left font-medium">Sign In Time</th>
+                            <th className="py-3 px-4 text-left font-medium">Sign Out Time</th>
+                            <th className="py-3 px-4 text-left font-medium">Attendance Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dept.records.map((rec, index) => (
+                            <tr
+                              key={`${rec.employeeId}-${dept.date}-${index}`}
+                              className={index % 2 === 0 ? "bg-[#eef3ff]" : "bg-white"}
+                            >
+                              <td className="py-3 px-4 font-medium text-foreground">{rec.name}</td>
+                              <td className="py-3 px-4">{rec.type}</td>
+                              <td className="py-3 px-4">
+                                {new Date(dept.date).toLocaleDateString()}
+                              </td>
+                              <td className="py-3 px-4">{rec.signIn}</td>
+                              <td className="py-3 px-4">{rec.signOut}</td>
+                              <td className="py-3 px-4">
+                                <Badge
+                                  variant="secondary"
+                                  className="rounded-full px-3 bg-primary/10 text-primary"
+                                >
+                                  {rec.status}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isDepartmentHead && departmentRecords.length > 0 && viewMode === "department" && (
+              <div className="py-6 px-6 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-primary">Department Attendance</h3>
+                    <p className="text-sm text-muted-foreground">Attendance records for your department</p>
+                  </div>
+                  <Button
+                    className="rounded-full px-5"
+                    onClick={() => {
+                      const csvRows: string[] = [];
+                      csvRows.push(
+                        "Employee Name,Employee ID,Employee Type,Date,Sign In Time,Sign Out Time,Attendance Status"
+                      );
+                      departmentRecords.forEach((dept) => {
                         dept.records.forEach((rec) => {
                           csvRows.push(
                             `"${rec.name}","${rec.employeeId}","${
@@ -587,32 +886,67 @@ const AttendanceList = () => {
                             }","${rec.signOut}","${rec.status}"`
                           );
                         });
-                        const csvContent = csvRows.join("\n");
-                        const blob = new Blob([csvContent], {
-                          type: "text/csv;charset=utf-8;",
-                        });
-                        const link = document.createElement("a");
-                        const url = URL.createObjectURL(blob);
-                        link.setAttribute("href", url);
-                        link.setAttribute(
-                          "download",
-                          `attendance_${dept.department.replace(/\s+/g, "_")}_${
-                            dept.date
-                          }.csv`
-                        );
-                        link.style.visibility = "hidden";
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        toast({
-                          title: "Report Generated",
-                          description: `CSV exported for ${dept.department}`,
-                        });
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Generate Report
-                    </Button>
+                      });
+                      const csvContent = csvRows.join("\n");
+                      const blob = new Blob([csvContent], {
+                        type: "text/csv;charset=utf-8;",
+                      });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute("href", url);
+                      link.setAttribute(
+                        "download",
+                        `department_attendance_${reportFilter}_${new Date().toISOString().split('T')[0]}.csv`
+                      );
+                      link.style.visibility = "hidden";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast({
+                        title: "Report Generated",
+                        description: `CSV exported for department attendance (${reportFilter})`,
+                      });
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Generate Report
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state - show appropriate message based on role and view */}
+            {(isDepartmentHead && viewMode === "personal" ? personalRecords.length === 0 : 
+              isDepartmentHead && viewMode === "department" ? departmentRecords.length === 0 : 
+              isSystemAdmin || user?.role === "employee" ? departmentRecords.length === 0 : false) ? (
+              <div className="py-12 text-center">
+                <p className="text-muted-foreground">
+                  No attendance records found.
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Add attendance records to see them here.
+                </p>
+              </div>
+            ) : (isDepartmentHead || user?.role === "employee") ? null : (
+              /* System Admin sees all records without dual-view */
+              departmentRecords.map((dept, sectionIndex) => (
+                <div
+                  key={`${dept.department}-${dept.date}-${sectionIndex}`}
+                  className="py-6 px-0 space-y-4"
+                >
+                  <div className="px-6">
+                    <div>
+                      <p className="uppercase text-xs font-semibold text-muted-foreground">
+                        {dept.department}
+                      </p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {new Date(dept.date).toLocaleDateString(undefined, {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">

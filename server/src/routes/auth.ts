@@ -31,9 +31,11 @@ router.post("/login", async (req, res) => {
     let rows: DbUser[];
     try {
       [rows] = await pool.execute<DbUser[]>(
-        `SELECT id, username, email, employee_id, full_name, role, password_hash, password_reset_required
-         FROM users
-         WHERE username = ? OR email = ? OR employee_id = ?
+        `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash, u.password_reset_required,
+                e.position, e.department
+         FROM users u
+         LEFT JOIN employees e ON u.employee_id = e.employee_id
+         WHERE u.username = ? OR u.email = ? OR u.employee_id = ?
          LIMIT 1`,
         [identifier, identifier, identifier]
       );
@@ -44,9 +46,11 @@ router.post("/login", async (req, res) => {
           "password_reset_required column not found, selecting without it"
         );
         [rows] = await pool.execute<DbUser[]>(
-          `SELECT id, username, email, employee_id, full_name, role, password_hash
-           FROM users
-           WHERE username = ? OR email = ? OR employee_id = ?
+          `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash,
+                  e.position, e.department
+           FROM users u
+           LEFT JOIN employees e ON u.employee_id = e.employee_id
+           WHERE u.username = ? OR u.email = ? OR u.employee_id = ?
            LIMIT 1`,
           [identifier, identifier, identifier]
         );
@@ -91,6 +95,8 @@ router.post("/login", async (req, res) => {
         role: user.role,
         employeeId: user.employee_id,
         email: user.email,
+        position: (user as any).position || null,
+        department: (user as any).department || null,
         passwordResetRequired,
       },
     });

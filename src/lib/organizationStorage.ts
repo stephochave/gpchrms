@@ -8,6 +8,7 @@ export interface Department {
 export interface Designation {
   id: string;
   name: string;
+  departmentId?: number;
   createdAt: string;
   updatedAt: string;
 }

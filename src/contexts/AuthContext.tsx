@@ -9,6 +9,8 @@ interface User {
   employeeId?: string | null;
   fullName: string;
   email?: string;
+  position?: string | null;
+  department?: string | null;
   token?: string;
   passwordResetRequired?: boolean;
 }
@@ -113,6 +115,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         employeeId: data.user.employeeId,
         fullName: data.user.fullName,
         email: data.user.email,
+        position: data.user.position || null,
+        department: data.user.department || null,
         token: data.token,
         passwordResetRequired: data.user.passwordResetRequired || false,
       };

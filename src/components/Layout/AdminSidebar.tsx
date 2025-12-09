@@ -18,6 +18,7 @@ import {
   Lock,
   Database,
   AlertTriangle,
+  Award,
   QrCode,
 } from "lucide-react";
 import {
@@ -72,6 +73,12 @@ export function AdminSidebar() {
   });
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const isAdmin = user?.role === "admin";
+  
+  // Determine user type: Department Head vs System Admin
+  const isDepartmentHead = user?.role === "admin" && user?.position &&
+                           (user.position.toLowerCase().includes("head") || 
+                            user.position.toLowerCase().includes("dean") || 
+                            user.position.toLowerCase().includes("principal"));
 
   const toggleGroup = useCallback((group: string) => {
     setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -126,45 +133,81 @@ export function AdminSidebar() {
     settingsActive,
   ]);
   const employeeMenuItems = useMemo(
-    () => [
-      {
-        id: "dashboard",
-        label: "Dashboard",
-        icon: LayoutDashboard,
-        onClick: () => navigate("/employee/dashboard"),
-        active: location.pathname === "/employee/dashboard",
-      },
-      {
-        id: "attendance",
-        label: "Attendance",
-        icon: Clock,
-        // onClick: () => navigate("/attendance/list"),
-        onClick: () => navigate("/attendance/history"),
+    () => {
+      const baseItems = [
+        {
+          id: "dashboard",
+          label: "Dashboard",
+          icon: LayoutDashboard,
+          onClick: () => navigate("/employee/dashboard"),
+          active: location.pathname === "/employee/dashboard",
+        },
+        {
+          id: "attendance",
+          label: "Attendance",
+          icon: Clock,
+          // onClick: () => navigate("/attendance/list"),
+          onClick: () => navigate("/attendance/history"),
         active: location.pathname.startsWith("/attendance"),
-      },
-      {
-        id: "leaves",
-        label: "Leaves",
-        icon: FileCheck,
-        onClick: () => navigate("/employee/leaves"),
-        active: location.pathname.startsWith("/employee/leaves"),
-      },
-      {
-        id: "profile",
-        label: "Profile",
-        icon: UserCircle,
-        onClick: () => navigate("/profile"),
-        active: location.pathname.startsWith("/profile"),
-      },
-      {
-        id: "logout",
-        label: "Logout",
-        icon: LogOut,
-        onClick: () => setLogoutDialogOpen(true),
-        active: false,
-      },
-    ],
-    [location.pathname, navigate]
+        },
+      ];
+
+      // Add leave items based on role
+      if (isDepartmentHead) {
+        baseItems.push(
+          {
+            id: "my-leaves",
+            label: "My Leave Requests",
+            icon: FileCheck,
+            onClick: () => navigate("/employee/leaves?view=my"),
+            active: location.pathname === "/employee/leaves" && !location.search.includes("view=department"),
+          },
+          {
+            id: "dept-leaves",
+            label: "Department Leaves",
+            icon: ListChecks,
+            onClick: () => navigate("/employee/leaves?view=department"),
+            active: location.pathname === "/employee/leaves" && location.search.includes("view=department"),
+          }
+        );
+      } else {
+        baseItems.push({
+          id: "leaves",
+          label: "Leaves",
+          icon: FileCheck,
+          onClick: () => navigate("/employee/leaves"),
+          active: location.pathname.startsWith("/employee/leaves"),
+        });
+      }
+
+      // Add remaining items
+      baseItems.push(
+        {
+          id: "loyalty",
+          label: "Loyalty Awards",
+          icon: Award,
+          onClick: () => navigate("/loyalty"),
+          active: location.pathname.startsWith("/loyalty"),
+        },
+        {
+          id: "profile",
+          label: "Profile",
+          icon: UserCircle,
+          onClick: () => navigate("/profile"),
+          active: location.pathname.startsWith("/profile"),
+        },
+        {
+          id: "logout",
+          label: "Logout",
+          icon: LogOut,
+          onClick: () => setLogoutDialogOpen(true),
+          active: false,
+        }
+      );
+
+      return baseItems;
+    },
+    [location.pathname, location.search, navigate, user?.position]
   );
 
   return (
@@ -218,59 +261,60 @@ export function AdminSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
 
-                {/* Employees */}
-                <Collapsible
-                  open={openGroups.employees}
-                  onOpenChange={() => toggleGroup("employees")}
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton
-                        className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        isActive={employeesActive}
-                      >
-                        <div className={iconClasses(employeesActive)}>
-                          <Users
-                            className={cn(
-                              "w-5 h-5",
-                              employeesActive ? "text-primary" : "text-white"
-                            )}
-                          />
-                        </div>
-                        {!collapsed && (
-                          <>
-                            <span className="flex-1 text-left">Employees</span>
-                            <ChevronDown
+                {/* Employees - Only for system admins */}
+                {!isDepartmentHead && (
+                  <Collapsible
+                    open={openGroups.employees}
+                    onOpenChange={() => toggleGroup("employees")}
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          isActive={employeesActive}
+                        >
+                          <div className={iconClasses(employeesActive)}>
+                            <Users
                               className={cn(
-                                "w-4 h-4 transition-transform",
-                                openGroups.employees && "rotate-180"
+                                "w-5 h-5",
+                                employeesActive ? "text-primary" : "text-white"
                               )}
                             />
-                          </>
-                        )}
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    {!collapsed && (
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() => navigate("/employees")}
-                              isActive={isActive("/employees")}
-                            >
-                              <span>Active Employees</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() => navigate("/employees/inactive")}
-                              isActive={isActive("/employees/inactive")}
-                              className="text-sidebar-foreground/50"
-                            >
-                              <span>Inactive Employees</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                          <SidebarMenuSubItem>
+                          </div>
+                          {!collapsed && (
+                            <>
+                              <span className="flex-1 text-left">Employees</span>
+                              <ChevronDown
+                                className={cn(
+                                  "w-4 h-4 transition-transform",
+                                  openGroups.employees && "rotate-180"
+                                )}
+                              />
+                            </>
+                          )}
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      {!collapsed && (
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                onClick={() => navigate("/employees")}
+                                isActive={isActive("/employees")}
+                              >
+                                <span>Active Employees</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                onClick={() => navigate("/employees/inactive")}
+                                isActive={isActive("/employees/inactive")}
+                                className="text-sidebar-foreground/50"
+                              >
+                                <span>Inactive Employees</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
                             <SidebarMenuSubButton
                               onClick={() => navigate("/generate-qr-codes")}
                               isActive={isActive("/generate-qr-codes")}
@@ -280,10 +324,11 @@ export function AdminSidebar() {
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         </SidebarMenuSub>
-                      </CollapsibleContent>
-                    )}
-                  </SidebarMenuItem>
-                </Collapsible>
+                        </CollapsibleContent>
+                      )}
+                    </SidebarMenuItem>
+                  </Collapsible>
+                )}
 
                 {/* Organization */}
                 <Collapsible
@@ -332,17 +377,6 @@ export function AdminSidebar() {
                               <span>Department</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() =>
-                                navigate("/organization/designation")
-                              }
-                              isActive={isActive("/organization/designation")}
-                              className="text-sidebar-foreground/50"
-                            >
-                              <span>Designation</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     )}
@@ -384,14 +418,39 @@ export function AdminSidebar() {
                     {!collapsed && (
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() => navigate("/attendance/list")}
-                              isActive={isActive("/attendance/list")}
-                            >
-                              <span>Attendance List</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
+                          {/* Department heads get dual view */}
+                          {user?.position && 
+                           (user.position.toLowerCase().includes("head") || 
+                            user.position.toLowerCase().includes("dean") || 
+                            user.position.toLowerCase().includes("principal")) ? (
+                            <>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  onClick={() => navigate("/attendance/list?view=personal")}
+                                  isActive={isActive("/attendance/list") && !location.search.includes("view=department")}
+                                >
+                                  <span>My Attendance</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  onClick={() => navigate("/attendance/list?view=department")}
+                                  isActive={isActive("/attendance/list") && location.search.includes("view=department")}
+                                >
+                                  <span>Department Attendance</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            </>
+                          ) : (
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                onClick={() => navigate("/attendance/list")}
+                                isActive={isActive("/attendance/list")}
+                              >
+                                <span>Attendance List</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          )}
                           <SidebarMenuSubItem>
                             <SidebarMenuSubButton
                               onClick={() => navigate("/attendance/add")}
@@ -451,12 +510,46 @@ export function AdminSidebar() {
                     {!collapsed && (
                       <CollapsibleContent>
                         <SidebarMenuSub>
+                          {/* Department heads get separate views */}
+                          {user?.position && 
+                           (user.position.toLowerCase().includes("head") || 
+                            user.position.toLowerCase().includes("dean") || 
+                            user.position.toLowerCase().includes("principal")) ? (
+                            <>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  onClick={() => navigate("/leaves?view=personal")}
+                                  isActive={isActive("/leaves") && !location.search.includes("view=department")}
+                                >
+                                  <span>My Leave Requests</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton
+                                  onClick={() => navigate("/leaves?view=department")}
+                                  isActive={isActive("/leaves") && location.search.includes("view=department")}
+                                >
+                                  <span>Department Leaves</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            </>
+                          ) : (
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                onClick={() => navigate("/leaves")}
+                                isActive={isActive("/leaves")}
+                              >
+                                <span>All Leave Requests</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          )}
                           <SidebarMenuSubItem>
                             <SidebarMenuSubButton
-                              onClick={() => navigate("/leaves")}
-                              isActive={isActive("/leaves")}
+                              onClick={() => navigate("/leave-reports")}
+                              isActive={isActive("/leave-reports")}
+                              className="text-sidebar-foreground/50"
                             >
-                              <span>Leave Requests</span>
+                              <span>Leave Reports</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         </SidebarMenuSub>
@@ -521,6 +614,29 @@ export function AdminSidebar() {
                     )}
                   </SidebarMenuItem>
                 </Collapsible>
+
+                {/* Loyalty Awards */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigate("/loyalty")}
+                    isActive={isActive("/loyalty")}
+                    className={cn(
+                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      isActive("/loyalty") &&
+                        "bg-sidebar-accent text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <div className={iconClasses(isActive("/loyalty"))}>
+                      <Award
+                        className={cn(
+                          "w-5 h-5",
+                          isActive("/loyalty") ? "text-primary" : "text-white"
+                        )}
+                      />
+                    </div>
+                    {!collapsed && <span>Loyalty Awards</span>}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
                 {/* Settings */}
                 <Collapsible

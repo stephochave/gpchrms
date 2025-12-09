@@ -46,6 +46,8 @@ export interface DbEmployee extends RowDataPacket {
   status: 'active' | 'inactive';
   archived_reason: string | null;
   archived_at: string | null;
+  employment_count?: number | null;
+  current_employment_period?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -96,12 +98,17 @@ export interface DbLeaveRequest extends RowDataPacket {
   id: number;
   employee_id: string;
   employee_name: string;
+  employee_department: string;
   leave_type_id: number;
   leave_type: 'vacation' | 'sick' | 'emergency' | 'unpaid' | 'other';
   start_date: string;
   end_date: string;
   total_days: number;
   reason: string | null;
+  status: 'pending' | 'department_approved' | 'approved' | 'rejected';
+  department_head_comment: string | null;
+  department_head_approved_by: string | null;
+  department_head_approved_at: string | null;
   admin_comment: string | null;
   decided_by: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
