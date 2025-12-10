@@ -136,7 +136,8 @@ router.get("/", async (req, res) => {
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
               service_record_file, file_201, status,
-              archived_reason, archived_at, created_at, updated_at
+              archived_reason, archived_at, created_at, updated_at,
+              qr_code_data, qr_code_secret, qr_code_generated_at
          FROM employees
          ${whereClause}
          ORDER BY created_at DESC`,
@@ -162,7 +163,8 @@ router.get("/:id", async (req, res) => {
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
               service_record_file, file_201 , status,
-              archived_reason, archived_at, created_at, updated_at, password_hash
+              archived_reason, archived_at, created_at, updated_at, password_hash,
+              qr_code_data, qr_code_secret, qr_code_generated_at
          FROM employees
          WHERE id = ?
          LIMIT 1`,
@@ -224,7 +226,7 @@ router.post("/", async (req, res) => {
     signatureFile,
     pdsFile,
     serviceRecordFile,
-    registeredFaceFile,
+    file201,
     password,
     status,
     archivedReason,
@@ -233,7 +235,8 @@ router.post("/", async (req, res) => {
 
   const sanitizedMiddleName = middleName?.trim() || "N/A";
   const sanitizedSuffixName = suffixName?.trim() || "";
-  const sanitizedRegisteredFace = registeredFaceFile?.trim() || null;
+  const sanitizedFile201 = file201?.trim() || null;
+  // const sanitizedRegisteredFace = registeredFaceFile?.trim() || null;
 
   const normalizedFullName =
     fullName?.trim() ||
