@@ -58,6 +58,7 @@ const employeeSchema = z.object({
   signatureFile: z.string().optional().nullable(),
   pdsFile: z.string().optional().nullable(),
   serviceRecordFile: z.string().optional().nullable(),
+  file201: z.string().optional().nullable(),
   registeredFaceFile: z.string().optional().nullable(),
   password: z.string().trim().min(6, "Password must be at least 6 characters"),
   status: z.enum(["active", "inactive"]).optional(),

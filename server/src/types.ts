@@ -39,6 +39,7 @@ export interface DbEmployee extends RowDataPacket {
   signature_file: string | null;
   pds_file: string | null;
   service_record_file: string | null;
+  file201: string | null;
   qr_code_data: string | null;
   qr_code_secret: string | null;
   qr_code_generated_at: string | null;
