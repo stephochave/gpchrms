@@ -225,17 +225,6 @@ const AttendanceList = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [attendanceRes, employeesRes] = await Promise.all([
-          apiFetch(`${API_BASE_URL}/attendance`),
-          apiFetch(`${API_BASE_URL}/employees?status=active`),
-        ]);
-
-        if (!attendanceRes.ok || !employeesRes.ok) {
-        
-        if (!user?.employeeId) {
-          applySampleData();
-          return;
-        }
 
         // Determine if user is a department head (admin with specific position)
         const isDepartmentHead = user?.role === "admin" && user?.position && 
@@ -280,13 +269,6 @@ const AttendanceList = () => {
           return;
         }
 
-        const today = new Date().toISOString().split("T")[0];
-        const now = new Date();
-        const currentHour = now.getHours();
-
-        // Note: Auto-checkout at 7 PM is handled by the backend
-        // The backend will automatically update records every minute
-        
         setAttendance(attendanceRecords);
         setEmployees(employees);
         setUsingSampleData(false);

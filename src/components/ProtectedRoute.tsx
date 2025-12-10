@@ -9,24 +9,22 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
-  const { user, isAuthenticated, isLoading } = useAuth();
-
-  // Treat department heads (admin role with head/dean/principal titles) like employees for route access
-  const isDepartmentHead =
-    user?.role === 'admin' &&
-    user?.position &&
-    (user.position.toLowerCase().includes('head') ||
-      user.position.toLowerCase().includes('dean') ||
-      user.position.toLowerCase().includes('principal') ||
-      user.position.toLowerCase().includes('chairman') ||
-      user.position.toLowerCase().includes('president'));
-
-  if (isLoading) {
+  // ----- Core auth context -----
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  // ----- Local state for employee status check -----
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(true);
   const [userStatus, setUserStatus] = React.useState<'active' | 'inactive' | null>(null);
 
-  // Check user status if they have an employeeId
+  // ----- Department head role override -----
+  const isDepartmentHead =
+    user?.role === 'admin' &&
+    user?.position &&
+    ['head', 'dean', 'principal', 'chairman', 'president'].some((rank) =>
+      user.position.toLowerCase().includes(rank)
+    );
+
+  // ----- Status validation -----
   React.useEffect(() => {
     const checkUserStatus = async () => {
       if (!user?.employeeId) {
@@ -35,19 +33,20 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
       }
 
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+        const API_BASE_URL =
+          import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
         const response = await apiFetch(
           `${API_BASE_URL}/employees?employeeId=${user.employeeId}`
         );
-        
+
         if (response.ok) {
           const data = await response.json();
           const employee = data.data?.[0];
-          
+
           if (employee) {
             setUserStatus(employee.status);
-            
-            // If inactive, log out and redirect
+
             if (employee.status === 'inactive') {
               logout();
               setIsCheckingStatus(false);
@@ -55,11 +54,10 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
             }
           }
         }
-      } catch (error) {
-        console.error('Error checking user status:', error);
-        // Continue if check fails (don't block access)
+      } catch (err) {
+        console.error('Error checking user status:', err);
       }
-      
+
       setIsCheckingStatus(false);
     };
 
@@ -70,6 +68,7 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     }
   }, [user, isAuthenticated, logout]);
 
+  // ----- Unified loading gate -----
   if (isLoading || isCheckingStatus) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -78,19 +77,18 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     );
   }
 
-  if (!isAuthenticated) {
+  // ----- Hard access gate -----
+  if (!isAuthenticated || userStatus === 'inactive') {
     return <Navigate to="/login" replace />;
   }
 
-  // If user status is inactive, redirect to login
-  if (userStatus === 'inactive') {
-    return <Navigate to="/login" replace />;
-  }
+  // ----- Fall back route -----
+  const fallbackPath =
+    user?.role === 'admin' ? '/dashboard' : '/employee/dashboard';
 
-  const fallbackPath = user?.role === 'admin' ? '/dashboard' : '/employee/dashboard';
-
+  // ----- Role-based gating -----
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    // Allow department heads to pass through employee-only routes
+    // Department heads gain access to employee routes
     if (isDepartmentHead && allowedRoles.includes('employee')) {
       return <>{children}</>;
     }

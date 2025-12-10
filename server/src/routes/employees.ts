@@ -135,7 +135,7 @@ router.get("/", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, registered_face_file, status,
+              service_record_file, file_201, status,
               archived_reason, archived_at, created_at, updated_at
          FROM employees
          ${whereClause}
@@ -161,7 +161,7 @@ router.get("/:id", async (req, res) => {
               date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
               employment_type, role, sss_number, pagibig_number, tin_number,
               emergency_contact, educational_background, signature_file, pds_file,
-              service_record_file, file_201, registered_face_file, status,
+              service_record_file, file_201 , status,
               archived_reason, archived_at, created_at, updated_at, password_hash
          FROM employees
          WHERE id = ?

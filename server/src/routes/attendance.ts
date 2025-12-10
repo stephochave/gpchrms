@@ -32,8 +32,8 @@ const mapAttendanceRow = (row: DbAttendance) => ({
   checkOut: row.check_out || undefined,
   status: row.status,
   notes: row.notes || undefined,
-  checkInImage: row.check_in_image || undefined,
-  checkOutImage: row.check_out_image || undefined,
+  // checkInImage: row.check_in_image || undefined,
+  // checkOutImage: row.check_out_image || undefined,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -75,7 +75,7 @@ router.get('/', async (req, res) => {
 
     const [rows] = await pool.execute<DbAttendance[]>(
       `SELECT id, employee_id, employee_name, date, check_in, check_out, status, notes, 
-              check_in_image, check_out_image, created_at, updated_at
+              created_at, updated_at
        FROM attendance
        ${whereClause}
        ORDER BY date DESC, check_in DESC`,
@@ -96,7 +96,7 @@ router.get('/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute<DbAttendance[]>(
       `SELECT id, employee_id, employee_name, date, check_in, check_out, status, notes, 
-              check_in_image, check_out_image, created_at, updated_at
+             created_at, updated_at
        FROM attendance
        WHERE id = ?`,
       [req.params.id],
@@ -189,15 +189,14 @@ router.post('/', async (req, res) => {
   try {
     const [result] = await pool.execute(
       `INSERT INTO attendance 
-       (employee_id, employee_name, date, check_in, check_out, status, notes, check_in_image, check_out_image)
+       (employee_id, employee_name, date, check_in, check_out, status, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          check_in = COALESCE(VALUES(check_in), check_in),
          check_out = COALESCE(VALUES(check_out), check_out),
          status = VALUES(status),
          notes = COALESCE(VALUES(notes), notes),
-         check_in_image = COALESCE(VALUES(check_in_image), check_in_image),
-         check_out_image = COALESCE(VALUES(check_out_image), check_out_image),
+
          updated_at = CURRENT_TIMESTAMP`,
       [
         employeeId,
@@ -229,7 +228,7 @@ router.post('/', async (req, res) => {
 
     const [newRows] = await pool.execute<DbAttendance[]>(
       `SELECT id, employee_id, employee_name, date, check_in, check_out, status, notes, 
-              check_in_image, check_out_image, created_at, updated_at
+               created_at, updated_at
        FROM attendance
        WHERE id = ?`,
       [insertId],
@@ -292,14 +291,14 @@ router.put('/:id', async (req, res) => {
       updates.push('notes = ?');
       params.push(notes || null);
     }
-    if (checkInImage !== undefined) {
-      updates.push('check_in_image = ?');
-      params.push(checkInImage || null);
-    }
-    if (checkOutImage !== undefined) {
-      updates.push('check_out_image = ?');
-      params.push(checkOutImage || null);
-    }
+    // if (checkInImage !== undefined) {
+    //   updates.push('check_in_image = ?');
+    //   params.push(checkInImage || null);
+    // }
+    // if (checkOutImage !== undefined) {
+    //   updates.push('check_out_image = ?');
+    //   params.push(checkOutImage || null);
+    // }
 
     if (updates.length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
@@ -317,7 +316,7 @@ router.put('/:id', async (req, res) => {
     // Get updated record
     const [updatedRows] = await pool.execute<DbAttendance[]>(
       `SELECT id, employee_id, employee_name, date, check_in, check_out, status, notes, 
-              check_in_image, check_out_image, created_at, updated_at
+             created_at, updated_at
        FROM attendance
        WHERE id = ?`,
       [req.params.id],

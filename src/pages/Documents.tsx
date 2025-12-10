@@ -143,43 +143,6 @@ const Documents = () => {
       user.position.toLowerCase().includes("chairman") ||
       user.position.toLowerCase().includes("president"));
 
-  // Helper function to fetch and process documents
-  const fetchAndProcessDocuments = async () => {
-    try {
-      const [documentsRes, employeesRes, allDocsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
-        fetch(`${API_BASE_URL}/employees?status=active`),
-        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
-      ]);
-
-      if (!documentsRes.ok) {
-        throw new Error("Failed to fetch documents");
-      }
-
-      const documentsData = await documentsRes.json();
-      const allDocsData = await allDocsRes.json();
-      let employeesData: any[] = [];
-
-      if (employeesRes.ok) {
-        const empData = await employeesRes.json();
-        employeesData = empData.data || [];
-
-        // Restrict department heads to their own department
-        if (isDepartmentHead && user?.department) {
-          employeesData = employeesData.filter(
-            (emp: any) =>
-              String(emp.department || "").toLowerCase() ===
-              String(user.department).toLowerCase()
-          );
-        }
-
-        setEmployees(employeesData);
-      }
-
-      // Create employee map for names and files
-      const employeeMap = new Map(
-        employeesData.map((emp: any) => [emp.employeeId, emp])
-      );
   // Helper function to process employee documents
   const processEmployeeDocuments = (employeesData: any[], documentsData: any[]) => {
     const employeeMap = new Map(

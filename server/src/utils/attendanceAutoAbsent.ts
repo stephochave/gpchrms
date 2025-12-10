@@ -117,7 +117,7 @@ export const autoMarkAbsentForToday = async () => {
 
     await pool.execute(
       `INSERT INTO attendance
-        (employee_id, employee_name, date, check_in, check_out, status, notes, check_in_image, check_out_image)
+        (employee_id, employee_name, date, check_in, check_out, status, notes)
        VALUES ${valuesPlaceholders}`,
       params
     );

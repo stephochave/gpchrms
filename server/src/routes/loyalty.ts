@@ -55,7 +55,7 @@ export const initializeLoyaltyTable = async () => {
         generated_by VARCHAR(255) NOT NULL,
         generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         approved_by VARCHAR(255),
-        approved_at TIMESTAMP,
+        approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,

@@ -111,7 +111,6 @@ export interface DbLeaveRequest extends RowDataPacket {
   department_head_approved_at: string | null;
   admin_comment: string | null;
   decided_by: string | null;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_notes: string | null;

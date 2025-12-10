@@ -344,7 +344,7 @@ const DepartmentPage = () => {
       }
 
       // Refresh stats
-      await fetchDepartmentStats();
+      await fetchDepartmentStats(departments);
     } catch (error: any) {
       console.error(error);
       toast({
