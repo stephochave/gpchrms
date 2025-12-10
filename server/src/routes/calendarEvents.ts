@@ -32,7 +32,9 @@ const mapCalendarEventRow = (row: DbCalendarEvent) => ({
   title: row.title,
   type: row.type,
   description: row.description || '',
-  eventDate: row.event_date,
+  eventDate: typeof row.event_date === 'string' 
+    ? row.event_date.split('T')[0] 
+    : new Date(row.event_date).toISOString().split('T')[0],
   eventTime: row.event_time || null,
   createdBy: row.created_by || null,
   createdAt: row.created_at,
@@ -111,9 +113,12 @@ router.post('/', async (req, res) => {
   const { title, type, description, eventDate, eventTime, createdBy } = parseResult.data;
 
   try {
+    // Ensure date is in YYYY-MM-DD format without timezone
+    const formattedDate = eventDate.split('T')[0];
+    
     const [result] = await pool.execute(
-      'INSERT INTO calendar_events (title, type, description, event_date, event_time, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, type, description || null, eventDate, eventTime || null, createdBy || null]
+      'INSERT INTO calendar_events (title, type, description, event_date, event_time, created_by) VALUES (?, ?, ?, DATE(?), ?, ?)',
+      [title, type, description || null, formattedDate, eventTime || null, createdBy || null]
     );
 
     const insertId = (result as any).insertId;
