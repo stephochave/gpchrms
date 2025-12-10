@@ -24,6 +24,9 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
       user.position.toLowerCase().includes(rank)
     );
 
+  // ----- Guard role detection by position/designation -----
+  const isGuard = user?.position?.toLowerCase().includes('security guard');
+
   // ----- Status validation -----
   React.useEffect(() => {
     const checkUserStatus = async () => {
@@ -87,13 +90,17 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     user?.role === 'admin' ? '/dashboard' : '/employee/dashboard';
 
   // ----- Role-based gating -----
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    // Department heads gain access to employee routes
-    if (isDepartmentHead && allowedRoles.includes('employee')) {
-      return <>{children}</>;
-    }
+  if (allowedRoles && user) {
+    const effectiveRole = isGuard ? 'guard' : user.role;
+    
+    if (!allowedRoles.includes(effectiveRole as any)) {
+      // Department heads gain access to employee routes
+      if (isDepartmentHead && allowedRoles.includes('employee')) {
+        return <>{children}</>;
+      }
 
-    return <Navigate to={fallbackPath} replace />;
+      return <Navigate to={fallbackPath} replace />;
+    }
   }
 
   return <>{children}</>;
