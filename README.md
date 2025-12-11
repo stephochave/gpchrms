@@ -102,14 +102,20 @@ Low Level Access:
 ## Importing Database 
 ### Using XAMPP
 ```
-Start Apache + MySQL in XAMPP.
-    Go to: http://localhost/phpmyadmin
-        Import tab.
-            Upload your gpchrms_final_database.sql 
+    1. Start Apache + MySQL in XAMPP.
+    2. Go to: http://localhost/phpmyadmin
+    3. Delete the old database
+        a. Select the DB ('hrms' if exist) → Operations → Drop the database -> OK
+    4. Create new Database 'hrms'
+        a. Select New -> Databases -> Database Name: 'hrms' -> Create
+    5. Upload your gpchrms_final_database.sql 
 ```
 
+### Using MySQL Command Line
 ```
-
+    1. mysql -u root -p -e "DROP DATABASE IF EXISTS hrms;"
+    2. mysql -u root -p -e "CREATE DATABASE hrms;"
+    3. mysql -u root -p hrms < C:\path\gpchrms_final_database.sql
 ```
 
 
