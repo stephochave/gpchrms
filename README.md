@@ -101,5 +101,12 @@ Low Level Access:
 
 ## Importing Database 
 
+### Start Apache + MySQL in XAMPP.
+### Go to:
+### http://localhost/phpmyadmin
+### Import tab.
+### Upload your gpchrms_final_database.sql 
+
+
 
 
