@@ -176,7 +176,7 @@ const formatEmployeeId = (id: string): string => {
   return `25-GPC-${cleaned}`;
 };
 
-// Format email by adding @tgpc.edu.ph if not present
+// Format email by adding @gpc.edu if not present
 const formatEmail = (email: string): string => {
   const cleaned = email.trim().toLowerCase();
   // If already has the domain, return as is
@@ -184,7 +184,7 @@ const formatEmail = (email: string): string => {
     return cleaned;
   }
   // Otherwise add the domain
-  return `${cleaned}@tgpc.edu.ph`;
+  return `${cleaned}@gpc.edu`;
 };
 
 // Auto-generate email from first and last name
@@ -194,7 +194,7 @@ const generateEmail = (firstName: string, lastName: string): string => {
   
   if (!first || !last) return "";
   
-  return `${first}${last}@tgpc.edu.ph`;
+  return `${first}${last}@tgpc.edu`;
 };
 
 const validateEmployeeId = (id: string): boolean => {
@@ -341,7 +341,8 @@ const Employees = () => {
     dateHired: employee.dateHired,
     dateOfLeaving: employee.dateOfLeaving || "",
     employmentType: employee.employmentType || "Regular",
-    role: employee.role || "",
+    
+    role: employee.role || "Employee", // Added edit form role mapping
     sssNumber: employee.sssNumber || "",
     pagibigNumber: employee.pagibigNumber || "",
     tinNumber: employee.tinNumber || "",
@@ -562,6 +563,7 @@ const Employees = () => {
           status: employee.status === "active" ? "Active" : "Inactive",
           employmentType: employee.employmentType || "Regular",
           emergencyContact: employee.emergencyContact || "",
+          role: employee.role ? employee.role.charAt(0).toUpperCase() + employee.role.slice(1).toLowerCase() : "Employee",
           educationalBackground: employee.educationalBackground || "",
           signatureFile: employee.signatureFile || "",
           signatureFileSize: employee.signatureFile ? "Uploaded" : "",
@@ -593,6 +595,7 @@ const Employees = () => {
           dateOfJoining: employee.dateHired,
           status: employee.status === "active" ? "Active" : "Inactive",
           employmentType: employee.employmentType || "Regular",
+          role: employee.role ? employee.role.charAt(0).toUpperCase() + employee.role.slice(1).toLowerCase() : "Employee",
           emergencyContact: employee.emergencyContact || "",
           educationalBackground: employee.educationalBackground || "",
           signatureFile: employee.signatureFile || "",
@@ -625,6 +628,7 @@ const Employees = () => {
         dateOfJoining: employee.dateHired,
         status: employee.status === "active" ? "Active" : "Inactive",
         employmentType: employee.employmentType || "Regular",
+        role: employee.role ? employee.role.charAt(0).toUpperCase() + employee.role.slice(1).toLowerCase() : "Employee",
         emergencyContact: employee.emergencyContact || "",
         educationalBackground: employee.educationalBackground || "",
         signatureFile: employee.signatureFile || "",
@@ -689,7 +693,7 @@ const Employees = () => {
           dateHired: editForm.dateOfJoining || undefined,
           dateOfLeaving: editForm.dateOfLeaving || undefined,
           employmentType: editForm.employmentType || undefined,
-          role: editForm.role || undefined,
+          role: editForm.role ? editForm.role.toLowerCase() : undefined,
           gender: editForm.gender || undefined,
           civilStatus: editForm.civilStatus || undefined,
           sssNumber: editForm.sssNumber || undefined,

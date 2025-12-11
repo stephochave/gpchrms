@@ -250,6 +250,7 @@ router.post("/", async (req, res) => {
   try {
     const connection = await pool.getConnection();
     let insertId: number | null = null;
+    let qrCode = null;
     try {
       await connection.beginTransaction();
 
@@ -267,18 +268,15 @@ router.post("/", async (req, res) => {
             : new Date()
           : null;
 
-      // Generate QR code for the employee
-      const qrCode = await generateEmployeeQRCode(employeeId, normalizedFullName);
-
+      // Insert employee first, without QR code fields
       const [result] = await connection.execute(
         `INSERT INTO employees
           (employee_id, first_name, middle_name, last_name, suffix_name, full_name, department, position, email, phone,
            date_of_birth, address, gender, civil_status, date_hired, date_of_leaving,
            employment_type, role, sss_number, pagibig_number, tin_number,
            emergency_contact, educational_background, signature_file, pds_file,
-           service_record_file, password_hash, status, archived_reason, archived_at,
-           qr_code_data, qr_code_secret, qr_code_generated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           service_record_file, password_hash, status, archived_reason, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
         [
           employeeId,
           firstName,
@@ -310,13 +308,17 @@ router.post("/", async (req, res) => {
           recordStatus,
           inactiveArchivedReason,
           inactiveArchivedAt,
-          qrCode.token,
-          qrCode.secret,
-          qrCode.expiresAt,
         ]
       );
 
       insertId = (result as any).insertId;
+
+      // Generate QR code for the employee (after insert, always)
+      qrCode = await generateEmployeeQRCode(employeeId, normalizedFullName);
+      await connection.execute(
+        `UPDATE employees SET qr_code_data = ?, qr_code_secret = ?, qr_code_generated_at = ? WHERE id = ?`,
+        [qrCode.token, qrCode.secret, qrCode.expiresAt, insertId]
+      );
 
       // Check if user already exists
       const [existingUsers] = await connection.execute<any[]>(
@@ -399,10 +401,10 @@ router.post("/", async (req, res) => {
       resourceType: "Employee",
       resourceId: insertId ? String(insertId) : undefined,
       resourceName: normalizedFullName,
-      description: `Employee ${normalizedFullName} (${employeeId}) was created and employee account was automatically created`,
+      description: `Employee ${normalizedFullName} (${employeeId}) was created and employee account was automatically created. QR code was auto-generated.`,
       ipAddress: getClientIp(req),
       status: "success",
-      metadata: { employeeId, department, position, userAccountCreated: true },
+      metadata: { employeeId, department, position, userAccountCreated: true, qrCodeGenerated: true },
     });
 
     return res.status(201).json({ message: "Employee added successfully" });
@@ -617,8 +619,8 @@ router.put("/:id", async (req, res) => {
         return res.status(404).json({ message: "Employee not found" });
       }
 
-      // Always update user account when updating employee
-      const userRole = "employee"; // Employees are always 'employee' role
+      // Always update user account when updating employee - use role from employees table
+      const userRole = updatedEmployee.role || "employee";
       const passwordToUse = hashedPassword || updatedEmployee.password_hash;
       
       if (passwordToUse) {

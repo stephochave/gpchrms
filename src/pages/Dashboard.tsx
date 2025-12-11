@@ -91,13 +91,12 @@ const Dashboard = () => {
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [eventType, setEventType] = useState<CalendarEventType>("reminder");
+  const [calendarEvents, setCalendarEvents] = useState<Record<number, CalendarEvent[]>>({});
   const [eventTitle, setEventTitle] = useState("");
   const [eventDescription, setEventDescription] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [eventTime, setEventTime] = useState("");
-  const [calendarEvents, setCalendarEvents] = useState<
-    Record<number, CalendarEvent[]>
-  >({});
+
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [recentActivities, setRecentActivities] = useState<
@@ -112,11 +111,19 @@ const Dashboard = () => {
     absent: 0,
     late: 0,
   });
+  const [approvedLeaves, setApprovedLeaves] = useState<any[]>([]);
+  const [pendingLeaves, setPendingLeaves] = useState<any[]>([]);
 
   // Get current month and year
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1; // 1-12
   const currentYear = currentDate.getFullYear();
+
+  // Check if user is a department head
+  const isDepartmentHead = user?.role === "admin" && user?.position &&
+    (user.position.toLowerCase().includes("head") || 
+     user.position.toLowerCase().includes("dean") || 
+     user.position.toLowerCase().includes("principal"));
 
   // Generate calendar days properly aligned with days of week
   const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
@@ -150,12 +157,14 @@ const Dashboard = () => {
   // Convert date string to day number
   const dateToDay = (dateStr: string): number | null => {
     try {
-      // Handle YYYY-MM-DD format
-      const parts = dateStr.split('T')[0].split('-');
+      // Handle YYYY-MM-DD format - split only on T to get date part first
+      const datePart = dateStr.split('T')[0];
+      const parts = datePart.split('-');
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10);
       const day = parseInt(parts[2], 10);
       
+      // Check if date is in current month/year
       if (month !== currentMonth || year !== currentYear) {
         return null; // Date is not in current month
       }
@@ -208,6 +217,79 @@ const Dashboard = () => {
       });
     } finally {
       setIsLoadingEvents(false);
+    }
+  };
+
+  // Fetch approved leaves for current month
+  const fetchApprovedLeaves = async () => {
+    try {
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      
+      // Department heads see only their department, system admins see all
+      let url = `${API_BASE_URL}/leaves?startDate=${startDate}&endDate=${endDate}&status=approved`;
+      if (isDepartmentHead && user?.department) {
+        url += `&department=${encodeURIComponent(user.department)}`;
+      }
+      
+      const response = await apiFetch(url);
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch leave requests");
+      }
+      
+      const data = await response.json();
+      setApprovedLeaves(data.data || []);
+    } catch (error) {
+      // Silently fail if server is not running
+      if (
+        error instanceof TypeError &&
+        error.message.includes("Failed to fetch")
+      ) {
+        setApprovedLeaves([]);
+        return;
+      }
+      console.error("Error fetching approved leaves", error);
+    }
+  };
+
+  // Fetch pending leaves (department heads see their department, system admins see all)
+  const fetchPendingLeaves = async () => {
+    try {
+      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      
+      // Department heads see only their department, system admins see all
+      let url = `${API_BASE_URL}/leaves?startDate=${startDate}&endDate=${endDate}&status=pending`;
+      if (isDepartmentHead && user?.department) {
+        url += `&department=${encodeURIComponent(user.department)}`;
+        console.log('Fetching pending leaves for department head:', user.department);
+        console.log('URL:', url);
+      } else {
+        console.log('Fetching all pending leaves for system admin');
+      }
+      
+      const response = await apiFetch(url);
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch pending leave requests");
+      }
+      
+      const data = await response.json();
+      console.log('Pending leaves data:', data.data);
+      setPendingLeaves(data.data || []);
+    } catch (error) {
+      // Silently fail if server is not running
+      if (
+        error instanceof TypeError &&
+        error.message.includes("Failed to fetch")
+      ) {
+        setPendingLeaves([]);
+        return;
+      }
+      console.error("Error fetching pending leaves", error);
     }
   };
 
@@ -362,11 +444,13 @@ const Dashboard = () => {
   useEffect(() => {
     if (user?.role === "admin") {
       fetchCalendarEvents();
+      fetchApprovedLeaves();
+      fetchPendingLeaves();
       fetchRecentActivities();
       fetchTodayAttendance();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonth, currentYear, user?.role]);
+  }, [currentMonth, currentYear, user?.role, user?.department]);
 
   const handleAddTodo = () => {
     if (!newTodoTask.trim()) {
@@ -399,6 +483,33 @@ const Dashboard = () => {
       title: "Success",
       description: "Todo deleted successfully.",
     });
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/calendar-events/${eventId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete calendar event");
+      }
+
+      // Refresh events from API
+      await fetchCalendarEvents();
+
+      toast({
+        title: "Success",
+        description: "Event deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting calendar event", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Unable to delete event. Please try again.",
+      });
+    }
   };
   const employeeQuickActions = [
     {
@@ -739,7 +850,27 @@ const Dashboard = () => {
                 <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-[minmax(40px,1fr)]">
                   {calendarDays.map((day, index) => {
                     const dayEvents = day ? calendarEvents[day] || [] : [];
+                    
+                    // Get approved leaves for this day (full date range)
+                    const dayLeaves = day ? approvedLeaves.filter(leave => {
+                      const dateStr = dayToDate(day);
+                      const leaveStart = leave.startDate.split('T')[0];
+                      const leaveEnd = leave.endDate.split('T')[0];
+                      return dateStr >= leaveStart && dateStr <= leaveEnd;
+                    }) : [];
+                    
+                    // Get pending leaves for this day (start date only)
+                    const dayPendingLeaves = day ?  pendingLeaves.filter(leave => {
+                      const dateStr = dayToDate(day);
+                      const leaveStart = leave.startDate.split('T')[0];
+                      return dateStr === leaveStart; // Only show on start date
+                    }) : [];
+
+                    
+                    
                     const hasEvents = dayEvents.length > 0;
+                    const hasLeaves = dayLeaves.length > 0;
+                    const hasPendingLeaves = dayPendingLeaves.length > 0;
                     const hasEventType = dayEvents.some(
                       (e) => e.type === "event"
                     );
@@ -773,7 +904,7 @@ const Dashboard = () => {
                       >
                         {/* <span className="font-medium text-xs sm:text-sm truncate">{day ?? ""}</span> */}
                       <span className="font-medium">{day ?? ""}</span>
-                        {day && hasEvents && (
+                        {day && (hasEvents || hasLeaves || hasPendingLeaves) && (
                           <div className="mt-1 flex items-center gap-0.5">
                             {hasEventType && (
                               <div
@@ -787,12 +918,24 @@ const Dashboard = () => {
                                 title="Reminder"
                               />
                             )}
+                            {hasLeaves && (
+                              <div
+                                className="h-2 w-2 rounded-full bg-green-500 ring-2 ring-green-200"
+                                title="Approved Leave"
+                              />
+                            )}
+                            {hasPendingLeaves && (
+                              <div
+                                className="h-2 w-2 rounded-full bg-yellow-500 ring-2 ring-yellow-200"
+                                title="Pending Leave Request"
+                              />
+                            )}
                           </div>
                         )}
                       </div>
                     );
 
-                    if (!day || !hasEvents) {
+                    if (!day || (!hasEvents && !hasLeaves && !hasPendingLeaves)) {
                       return <div key={index}>{DayContent}</div>;
                     }
 
@@ -825,7 +968,7 @@ const Dashboard = () => {
                                 {dayEvents.map((event, eventIndex) => (
                                   <div
                                     key={eventIndex}
-                                    className="border-l-2 border-primary pl-3 py-1"
+                                    className="border-l-2 border-primary pl-3 py-1 group/event"
                                   >
                                     <div className="flex items-center gap-2 mb-1">
                                       <Badge
@@ -846,6 +989,19 @@ const Dashboard = () => {
                                           {event.eventTime}
                                         </span>
                                       )}
+                                      {event.id && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteEvent(event.id!);
+                                          }}
+                                          className="ml-auto opacity-0 group-hover/event:opacity-100 transition-opacity h-5 w-5 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      )}
                                     </div>
                                     <p className="text-sm font-medium text-foreground">
                                       {event.title}
@@ -860,6 +1016,89 @@ const Dashboard = () => {
                                         Created by: {event.createdBy}
                                       </p>
                                     )}
+                                  </div>
+                                ))}
+                                {dayLeaves.map((leave, leaveIndex) => (
+                                  <div
+                                    key={`leave-${leaveIndex}`}
+                                    className="border-l-2 border-green-500 pl-3 py-1"
+                                  >
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs bg-green-50 border-green-500 text-green-700"
+                                      >
+                                        Approved Leave
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm font-medium text-foreground">
+                                      {leave.employeeName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {leave.leaveType} - {leave.totalDays} day(s)
+                                    </p>
+                                    {leave.reason && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {leave.reason}
+                                      </p>
+                                    )}
+                                    {leave.reviewedAt && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Approved: {new Date(leave.reviewedAt).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                          hour: "numeric",
+                                          minute: "2-digit"
+                                        })}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                                {dayPendingLeaves.map((leave, leaveIndex) => (
+                                  <div
+                                    key={`pending-leave-${leaveIndex}`}
+                                    className="border-l-2 border-yellow-500 pl-3 py-1"
+                                  >
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs bg-yellow-50 border-yellow-500 text-yellow-700"
+                                      >
+                                        Pending Leave
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm font-medium text-foreground">
+                                      {leave.employeeName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {leave.leaveType} - {leave.totalDays} day(s)
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {new Date(leave.startDate).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric"
+                                      })} - {new Date(leave.endDate).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric"
+                                      })}
+                                    </p>
+                                    {leave.reason && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {leave.reason}
+                                      </p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Submitted: {new Date(leave.createdAt).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit"
+                                      })}
+                                    </p>
                                   </div>
                                 ))}
                               </div>
@@ -1049,7 +1288,7 @@ const Dashboard = () => {
                   (calendarEvents[selectedDay]?.length ?? 0) > 0 && (
                     <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
                       <p className="text-sm font-semibold text-foreground">
-                        Existing items for this date
+                         Notes                         
                       </p>
                       <ul className="space-y-2">
                         {calendarEvents[selectedDay]!.map((item, index) => (
@@ -1241,7 +1480,25 @@ const Dashboard = () => {
               <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-[minmax(35px,1fr)]">
                 {calendarDays.map((day, index) => {
                   const dayEvents = day ? calendarEvents[day] || [] : [];
+                  
+                  // Get approved leaves for this day (full date range)
+                  const dayLeaves = day ? approvedLeaves.filter(leave => {
+                    const dateStr = dayToDate(day);
+                    const leaveStart = leave.startDate.split('T')[0];
+                    const leaveEnd = leave.endDate.split('T')[0];
+                    return dateStr >= leaveStart && dateStr <= leaveEnd;
+                  }) : [];
+                  
+                  // Get pending leaves for this day (start date only)
+                  const dayPendingLeaves = day ? pendingLeaves.filter(leave => {
+                    const dateStr = dayToDate(day);
+                    const leaveStart = leave.startDate.split('T')[0];
+                    return dateStr === leaveStart; // Only show on start date
+                  }) : [];
+                  
                   const hasEvents = dayEvents.length > 0;
+                  const hasLeaves = dayLeaves.length > 0;
+                  const hasPendingLeaves = dayPendingLeaves.length > 0;
                   const hasEventType = dayEvents.some(
                     (e) => e.type === "event"
                   );
@@ -1272,7 +1529,7 @@ const Dashboard = () => {
                       }}
                     >
                       <span className="font-medium">{day ?? ""}</span>
-                      {day && hasEvents && (
+                      {day && (hasEvents || hasLeaves || hasPendingLeaves) && (
                         <div className="mt-1 flex items-center gap-0.5">
                           {hasEventType && (
                             <div
@@ -1286,12 +1543,24 @@ const Dashboard = () => {
                               title="Reminder"
                             />
                           )}
+                          {hasLeaves && (
+                            <div
+                              className="h-2 w-2 rounded-full bg-green-500 ring-2 ring-green-200"
+                              title="Approved Leave"
+                            />
+                          )}
+                          {hasPendingLeaves && (
+                            <div
+                              className="h-2 w-2 rounded-full bg-yellow-500 ring-2 ring-yellow-200"
+                              title="Pending Leave Request"
+                            />
+                          )}
                         </div>
                       )}
                     </div>
                   );
 
-                  if (!day || !hasEvents) {
+                  if (!day || (!hasEvents && !hasLeaves && !hasPendingLeaves)) {
                     return <div key={index}>{DayContent}</div>;
                   }
 
@@ -1320,7 +1589,7 @@ const Dashboard = () => {
                               {dayEvents.map((event, eventIndex) => (
                                 <div
                                   key={eventIndex}
-                                  className="border-l-2 border-primary pl-3 py-1"
+                                  className="border-l-2 border-primary pl-3 py-1 group/event"
                                 >
                                   <div className="flex items-center gap-2 mb-1">
                                     <Badge
@@ -1338,8 +1607,27 @@ const Dashboard = () => {
                                     {event.eventTime && (
                                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                                         <Clock className="h-3 w-3" />
-                                        {event.eventTime}
+                                        {(() => {
+                                          const [hours, minutes] = event.eventTime.split(':');
+                                          const hour = parseInt(hours, 10);
+                                          const ampm = hour >= 12 ? 'PM' : 'AM';
+                                          const displayHour = hour % 12 || 12;
+                                          return `${displayHour}:${minutes} ${ampm}`;
+                                        })()}
                                       </span>
+                                    )}
+                                    {event.id && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteEvent(event.id!);
+                                        }}
+                                        className="ml-auto opacity-0 group-hover/event:opacity-100 transition-opacity h-5 w-5 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
                                     )}
                                   </div>
                                   <p className="text-sm font-medium text-foreground">
@@ -1350,11 +1638,97 @@ const Dashboard = () => {
                                       {event.description}
                                     </p>
                                   )}
+                                  {event.eventTime && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Time: {(() => {
+                                        const [hours, minutes] = event.eventTime.split(':');
+                                        const hour = parseInt(hours, 10);
+                                        const ampm = hour >= 12 ? 'PM' : 'AM';
+                                        const displayHour = hour % 12 || 12;
+                                        return `${displayHour}:${minutes} ${ampm}`;
+                                      })()}
+                                    </p>
+                                  )}
                                   {event.createdBy && (
                                     <p className="text-xs text-muted-foreground mt-1">
                                       Created by: {event.createdBy}
                                     </p>
                                   )}
+                                </div>
+                              ))}
+                              {dayLeaves.map((leave, leaveIndex) => (
+                                <div
+                                  key={`leave-${leaveIndex}`}
+                                  className="border-l-2 border-green-500 pl-3 py-1"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                      Approved Leave
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm font-medium text-foreground">
+                                    {leave.employeeName}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {leave.leaveType} - {leave.leaveReason}
+                                  </p>
+                                  {leave.reviewedAt && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Approved: {new Date(leave.reviewedAt).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit"
+                                      })}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                              {dayPendingLeaves.map((leave, leaveIndex) => (
+                                <div
+                                  key={`pending-leave-${leaveIndex}`}
+                                  className="border-l-2 border-yellow-500 pl-3 py-1"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs bg-yellow-50 border-yellow-500 text-yellow-700"
+                                    >
+                                      Pending Leave
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm font-medium text-foreground">
+                                    {leave.employeeName}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {leave.leaveType} - {leave.totalDays} day(s)
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {new Date(leave.startDate).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric"
+                                    })} - {new Date(leave.endDate).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric"
+                                    })}
+                                  </p>
+                                  {leave.reason && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {leave.reason}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Submitted: {new Date(leave.createdAt).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                      hour: "numeric",
+                                      minute: "2-digit"
+                                    })}
+                                  </p>
                                 </div>
                               ))}
                             </div>

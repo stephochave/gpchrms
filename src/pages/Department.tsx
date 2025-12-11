@@ -15,9 +15,8 @@ import { Department } from "@/lib/organizationStorage";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Pencil, Trash2, Database, ListChecks } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiFetch } from '@/lib/fetch';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
 const DepartmentPage = () => {
   const { user } = useAuth();
@@ -48,6 +47,7 @@ const DepartmentPage = () => {
   const [showAddDesignationDialog, setShowAddDesignationDialog] = useState(false);
   const [newDesignationName, setNewDesignationName] = useState("");
   const [isSubmittingDesignation, setIsSubmittingDesignation] = useState(false);
+  const [editingDesignationId, setEditingDesignationId] = useState<string | null>(null);
 
   const fetchDepartmentStats = async (deptList: Department[]) => {
     try {
@@ -116,7 +116,7 @@ const DepartmentPage = () => {
   const fetchDepartments = async () => {
     try {
       setIsLoading(true);
-      const response = await apiFetch(`${API_BASE_URL}/departments`);
+      const response = await fetch(`${API_BASE_URL}/departments`);
       if (!response.ok) {
         throw new Error("Failed to fetch departments");
       }
@@ -167,7 +167,7 @@ const DepartmentPage = () => {
         : `${API_BASE_URL}/departments`;
       const method = editingId ? "PUT" : "POST";
 
-      const response = await apiFetch(url, {
+      const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
@@ -213,7 +213,7 @@ const DepartmentPage = () => {
     }
 
     try {
-      const response = await apiFetch(`${API_BASE_URL}/departments/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/departments/${id}`, {
         method: "DELETE",
       });
 
@@ -310,8 +310,14 @@ const DepartmentPage = () => {
 
     try {
       setIsSubmittingDesignation(true);
-      const response = await fetch(`${API_BASE_URL}/designations`, {
-        method: "POST",
+      const isEditing = Boolean(editingDesignationId);
+      const url = isEditing
+        ? `${API_BASE_URL}/designations/${editingDesignationId}`
+        : `${API_BASE_URL}/designations`;
+      const method = isEditing ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -323,16 +329,19 @@ const DepartmentPage = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Failed to create designation");
+        throw new Error(error.message || "Failed to save designation");
       }
 
       toast({
         title: "Success",
-        description: "Designation added successfully",
+        description: isEditing
+          ? "Designation updated successfully"
+          : "Designation added successfully",
       });
 
       setNewDesignationName("");
       setShowAddDesignationDialog(false);
+      setEditingDesignationId(null);
 
       // Refresh designations
       if (selectedDepartmentId) {
@@ -350,7 +359,7 @@ const DepartmentPage = () => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Unable to add designation. Please try again.",
+        description: error.message || "Unable to save designation. Please try again.",
       });
     } finally {
       setIsSubmittingDesignation(false);
@@ -528,6 +537,14 @@ const DepartmentPage = () => {
                                 Edit
                               </Button>
                             )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewEmployees(dept.name)}
+                              className="h-9 gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                            >
+                              View
+                            </Button>
                             {!isDepartmentHead && (
                               <Button
                                 size="sm"
@@ -616,7 +633,11 @@ const DepartmentPage = () => {
                   <h3 className="text-sm font-semibold text-green-700">All Designations ({deptStats[selectedDepartmentName || '']?.designations || 0})</h3>
                   <Button
                     size="sm"
-                    onClick={() => setShowAddDesignationDialog(true)}
+                    onClick={() => {
+                      setEditingDesignationId(null);
+                      setNewDesignationName("");
+                      setShowAddDesignationDialog(true);
+                    }}
                     className="h-8 bg-green-600 hover:bg-green-700 text-white"
                   >
                     + Add Designation
@@ -634,6 +655,7 @@ const DepartmentPage = () => {
                           <th className="text-left py-3 px-4 font-semibold">#</th>
                           <th className="text-left py-3 px-4 font-semibold">Designation Name</th>
                           <th className="text-center py-3 px-4 font-semibold">Assigned</th>
+                          <th className="text-center py-3 px-4 font-semibold">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -653,6 +675,20 @@ const DepartmentPage = () => {
                                     Vacant
                                   </span>
                                 )}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-3"
+                                  onClick={() => {
+                                    setEditingDesignationId(d.id || null);
+                                    setNewDesignationName(d.name || "");
+                                    setShowAddDesignationDialog(true);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
                               </td>
                             </tr>
                           );
@@ -674,13 +710,26 @@ const DepartmentPage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Add Designation Dialog */}
-        <Dialog open={showAddDesignationDialog} onOpenChange={setShowAddDesignationDialog}>
+        {/* Add/Edit Designation Dialog */}
+        <Dialog
+          open={showAddDesignationDialog}
+          onOpenChange={(open) => {
+            setShowAddDesignationDialog(open);
+            if (!open) {
+              setEditingDesignationId(null);
+              setNewDesignationName("");
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Designation</DialogTitle>
+              <DialogTitle>
+                {editingDesignationId ? "Edit Designation" : "Add New Designation"}
+              </DialogTitle>
               <DialogDescription>
-                Add a new designation to {selectedDepartmentName}
+                {editingDesignationId
+                  ? `Update this designation in ${selectedDepartmentName || "the selected department"}`
+                  : `Add a new designation to ${selectedDepartmentName}`}
               </DialogDescription>
             </DialogHeader>
 
@@ -705,6 +754,7 @@ const DepartmentPage = () => {
                 onClick={() => {
                   setShowAddDesignationDialog(false);
                   setNewDesignationName("");
+                  setEditingDesignationId(null);
                 }}
               >
                 Cancel
@@ -714,7 +764,13 @@ const DepartmentPage = () => {
                 disabled={isSubmittingDesignation}
                 className="bg-green-600 hover:bg-green-700"
               >
-                {isSubmittingDesignation ? "Adding..." : "Add Designation"}
+                {isSubmittingDesignation
+                  ? editingDesignationId
+                    ? "Saving..."
+                    : "Adding..."
+                  : editingDesignationId
+                  ? "Save Changes"
+                  : "Add Designation"}
               </Button>
             </div>
           </DialogContent>

@@ -200,7 +200,7 @@ const AddAttendance = () => {
                 onChange={(e) => setEmployeeId(e.target.value.toUpperCase())}
                 className="h-12 rounded-xl"
                 required
-                disabled={isLoadingEmployee}
+                
               />
               {employeeName && (
                 <p className="text-sm text-green-600 font-medium">

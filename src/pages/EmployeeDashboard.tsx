@@ -3,10 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Camera, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -15,13 +12,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Camera, X, CalendarPlus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
-  DialogDescription,
   DialogHeader,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { Badge } from "@/components/ui/badge";
 
 import { QrCode, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -47,31 +53,58 @@ interface TodayAttendance {
   status?: string;
 }
 
+interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  eventDate: string;
+  eventTime?: string;
+  type: 'event' | 'reminder';
+  createdBy?: string;
+}
+
+interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  leaveType: string;
+  leaveReason: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  reviewedAt?: string;
+}
+
 const EmployeeDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [todayAttendance, setTodayAttendance] = useState<TodayAttendance>({});
-  const [cameraIsOpen, setCameraIsOpen] = useState(false);
-  const [activeCapture, setActiveCapture] = useState<"checkIn" | "checkOut" | null>(null);
-  const [cameraError, setCameraError] = useState("");
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [selectedDateForLeave, setSelectedDateForLeave] = useState<number | null>(null);
-  const [leaveType, setLeaveType] = useState("sick");
-  const [leaveReason, setLeaveReason] = useState("");
-  const [isFilingLeave, setIsFilingLeave] = useState(false);
-  
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [calendarEvents, setCalendarEvents] = useState<Record<string, CalendarEvent[]>>({});
+  const [approvedLeaves, setApprovedLeaves] = useState<LeaveRequest[]>([]);
+  const [pendingLeaves, setPendingLeaves] = useState<LeaveRequest[]>([]);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    leaveType: "vacation",
+    startDate: "",
+    endDate: "",
+    reason: "",
+  });
 
   // Calendar states
   const currentDate = new Date();
   const [selectedDate, setSelectedDate] = useState(currentDate.getDate());
   const [currentMonth, setCurrentMonth] = useState(currentDate.getMonth());
   const [currentYear, setCurrentYear] = useState(currentDate.getFullYear());
+
+  // Check if user is a department head
+  const isDepartmentHead = user?.role === "admin" && user?.position &&
+    (user.position.toLowerCase().includes("head") || 
+     user.position.toLowerCase().includes("dean") || 
+     user.position.toLowerCase().includes("principal"));
 
   // Get days in month
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -85,6 +118,9 @@ const EmployeeDashboard = () => {
   useEffect(() => {
     void fetchEmployeeData();
     void fetchTodayAttendance();
+    void fetchCalendarEvents();
+    void fetchApprovedLeaves();
+    void fetchPendingLeaves();
 
     const interval = setInterval(() => {
       void fetchTodayAttendance();
@@ -94,6 +130,12 @@ const EmployeeDashboard = () => {
       clearInterval(interval);
     };
   }, [user]);
+
+  useEffect(() => {
+    void fetchCalendarEvents();
+    void fetchApprovedLeaves();
+    void fetchPendingLeaves();
+  }, [currentMonth, currentYear]);
 
   const fetchEmployeeData = async () => {
     if (!user?.employeeId) return;
@@ -174,63 +216,152 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const handleFileLeave = async () => {
-    if (!selectedDateForLeave || !user?.employeeId || !user?.fullName) {
+  const fetchCalendarEvents = async () => {
+    try {
+      const startDate = new Date(currentYear, currentMonth, 1);
+      const endDate = new Date(currentYear, currentMonth + 1, 0);
+      
+      const response = await apiFetch(
+        `${API_BASE_URL}/calendar-events?startDate=${startDate.toISOString().split('T')[0]}&endDate=${endDate.toISOString().split('T')[0]}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const eventsByDate: Record<string, CalendarEvent[]> = {};
+        
+        data.data.forEach((event: CalendarEvent) => {
+          const date = new Date(event.eventDate);
+          const day = date.getDate();
+          if (!eventsByDate[day]) {
+            eventsByDate[day] = [];
+          }
+          eventsByDate[day].push(event);
+        });
+        
+        setCalendarEvents(eventsByDate);
+      }
+    } catch (error) {
+      console.error("Error fetching calendar events", error);
+    }
+  };
+
+  const fetchApprovedLeaves = async () => {
+    if (!user?.employeeId) return;
+    
+    try {
+      const startDate = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const endDate = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+      
+      // Department heads see their department's leaves, regular employees see only their own
+      let url = `${API_BASE_URL}/leaves?status=approved&startDate=${startDate}&endDate=${endDate}`;
+      if (isDepartmentHead && user?.department) {
+        url += `&department=${encodeURIComponent(user.department)}`;
+      } else {
+        url += `&employeeId=${user.employeeId}`;
+      }
+      
+      const response = await apiFetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setApprovedLeaves(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching approved leaves", error);
+    }
+  };
+
+  const fetchPendingLeaves = async () => {
+    if (!user?.employeeId) return;
+    
+    try {
+      const startDate = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const endDate = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+      
+      // Department heads see their department's pending leaves, regular employees see only their own
+      let url = `${API_BASE_URL}/leaves?status=pending&startDate=${startDate}&endDate=${endDate}`;
+      if (isDepartmentHead && user?.department) {
+        url += `&department=${encodeURIComponent(user.department)}`;
+      } else {
+        url += `&employeeId=${user.employeeId}`;
+      }
+      
+      const response = await apiFetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPendingLeaves(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching pending leaves", error);
+    }
+  };
+
+  const handleDayClick = (day: number) => {
+    const clickedDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    setLeaveForm({
+      leaveType: "vacation",
+      startDate: clickedDate,
+      endDate: clickedDate,
+      reason: "",
+    });
+    setShowLeaveDialog(true);
+  };
+
+  const handleLeaveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.employeeId) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Invalid leave request data",
+        title: "Profile incomplete",
+        description: "Your employee ID is missing. Contact an admin to update it.",
       });
       return;
     }
 
-    setIsFilingLeave(true);
-    try {
-      const leaveDate = new Date(currentYear, currentMonth, selectedDateForLeave).toISOString().split("T")[0];
+    if (!leaveForm.startDate || !leaveForm.endDate) {
+      toast({
+        variant: "destructive",
+        title: "Dates required",
+        description: "Please select a start and end date for your leave.",
+      });
+      return;
+    }
 
-      const response = await fetch(`${API_BASE_URL}/leaves`, {
+    setIsSubmittingLeave(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/leaves`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeeId: user.employeeId,
           employeeName: user.fullName,
-          leaveType: leaveType,
-          startDate: leaveDate,
-          endDate: leaveDate,
-          reason: leaveReason || undefined,
-          status: "pending",
+          employeeDepartment: employee?.department || user?.department || null,
+          leaveType: leaveForm.leaveType,
+          startDate: leaveForm.startDate,
+          endDate: leaveForm.endDate,
+          reason: leaveForm.reason || null,
+          createdBy: user.fullName,
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to file leave request");
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to submit leave");
 
-      toast({
-        title: "Success",
-        description: `Leave request filed for ${leaveType.toUpperCase()} on ${new Date(leaveDate).toLocaleDateString()}`,
+      toast({ 
+        title: "Leave submitted", 
+        description: "Your leave request has been submitted and is awaiting review." 
       });
-
-      // Reset form
-      setLeaveDialogOpen(false);
-      setSelectedDateForLeave(null);
-      setLeaveType("sick");
-      setLeaveReason("");
-    } catch (error) {
-      console.error("Error filing leave", error);
+      setShowLeaveDialog(false);
+      setLeaveForm({ leaveType: "vacation", startDate: "", endDate: "", reason: "" });
+    } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to file leave request. Please try again.",
+        title: "Submission failed",
+        description: error?.message || "Please try again.",
       });
     } finally {
-      setIsFilingLeave(false);
+      setIsSubmittingLeave(false);
     }
   };
 
@@ -256,7 +387,7 @@ const EmployeeDashboard = () => {
       <div className="h-full w-full -m-6">
         <Card className="rounded-none shadow-lg border-0 h-full">
           <CardContent className="p-8 h-full flex items-center">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full h-full">
               {/* Left: Employee Profile Card */}
               <div className="space-y-4 flex flex-col justify-center">
                 <div className="flex flex-col items-center text-center">
@@ -296,9 +427,15 @@ const EmployeeDashboard = () => {
 
               {/* Center: Calendar */}
               <div className="space-y-4 flex flex-col justify-center">
-                <h3 className="text-xl font-bold text-center">
-                  {monthNames[currentMonth]} {currentYear}
-                </h3>
+                <div className="flex flex-col items-center gap-2">
+                  <h3 className="text-xl font-bold text-center">
+                    {monthNames[currentMonth]} {currentYear}
+                  </h3>
+                  <p className="text-xs text-muted-foreground text-center flex items-center gap-1">
+                    <CalendarPlus className="h-3 w-3" />
+                    Click any date to file a leave request
+                  </p>
+                </div>
                 
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {dayNames.map((day) => (
@@ -316,29 +453,165 @@ const EmployeeDashboard = () => {
                     if (day === null) {
                       return <div key={`empty-${index}`} className="aspect-square" />;
                     }
+                    
                     const isSelected = day === selectedDate;
                     const isToday = day === currentDate.getDate() && 
                                    currentMonth === new Date().getMonth() &&
                                    currentYear === new Date().getFullYear();
                     
+                    const dayEvents = calendarEvents[day] || [];
+                    const dayLeaves = approvedLeaves.filter(leave => {
+                      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const leaveStart = leave.startDate.split('T')[0];
+                      const leaveEnd = leave.endDate.split('T')[0];
+                      return dateStr >= leaveStart && dateStr <= leaveEnd;
+                    });
+                    
+                    const dayPendingLeaves = pendingLeaves.filter(leave => {
+                      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const leaveStart = leave.startDate.split('T')[0];
+                      const leaveEnd = leave.endDate.split('T')[0];
+                      return dateStr >= leaveStart && dateStr <= leaveEnd;
+                    });
+                    
+                    const hasEvents = dayEvents.length > 0;
+                    const hasLeaves = dayLeaves.length > 0;
+                    const hasPendingLeaves = dayPendingLeaves.length > 0;
+                    const hasEventType = dayEvents.some(e => e.type === 'event');
+                    const hasReminderType = dayEvents.some(e => e.type === 'reminder');
+                    
+                    const DayContent = (
+                      <div className={`aspect-square rounded-lg text-sm font-medium transition-colors relative flex flex-col items-center justify-center ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground"
+                          : isToday
+                          ? "bg-primary/20 text-primary font-bold"
+                          : "hover:bg-muted"
+                      }`}>
+                        <span>{day}</span>
+                        {(hasEvents || hasLeaves || hasPendingLeaves) && (
+                          <div className="flex items-center gap-0.5 mt-0.5">
+                            {hasEventType && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-destructive" title="Event" />
+                            )}
+                            {hasReminderType && (
+                              <div className="h-1 w-1 rounded-full bg-primary" title="Reminder" />
+                            )}
+                            {hasLeaves && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-green-500" title="Approved Leave" />
+                            )}
+                            {hasPendingLeaves && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-red-500" title="Pending Leave" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                    
+                    if (!hasEvents && !hasLeaves && !hasPendingLeaves) {
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => handleDayClick(day)}
+                        >
+                          {DayContent}
+                        </button>
+                      );
+                    }
+                    
                     return (
-                      <button
-                        key={day}
-                        onClick={() => {
-                          setSelectedDate(day);
-                          setSelectedDateForLeave(day);
-                          setLeaveDialogOpen(true);
-                        }}
-                        className={`aspect-square rounded-lg text-sm font-medium transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground"
-                            : isToday
-                            ? "bg-primary/20 text-primary font-bold"
-                            : "hover:bg-muted hover:cursor-pointer"
-                        }`}
-                      >
-                        {day}
-                      </button>
+                      <HoverCard key={day} openDelay={200} closeDelay={100}>
+                        <HoverCardTrigger asChild>
+                          <button onClick={() => handleDayClick(day)}>
+                            {DayContent}
+                          </button>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80" side="top" align="center">
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold">
+                              {new Date(currentYear, currentMonth, day).toLocaleDateString("en-US", {
+                                weekday: "long",
+                                month: "long",
+                                day: "numeric",
+                                year: "numeric"
+                              })}
+                            </h4>
+                            <div className="space-y-2">
+                              {dayEvents.map((event, idx) => (
+                                <div key={idx} className="border-l-2 border-primary pl-3 py-1">
+                                  <Badge variant={event.type === 'event' ? 'default' : 'secondary'} className="text-xs mb-1">
+                                    {event.type === 'event' ? 'Event' : 'Reminder'}
+                                  </Badge>
+                                  <p className="text-sm font-medium">{event.title}</p>
+                                  {event.description && (
+                                    <p className="text-xs text-muted-foreground">{event.description}</p>
+                                  )}
+                                  {event.eventTime && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Time: {(() => {
+                                        const [hours, minutes] = event.eventTime.split(':');
+                                        const hour = parseInt(hours, 10);
+                                        const ampm = hour >= 12 ? 'PM' : 'AM';
+                                        const displayHour = hour % 12 || 12;
+                                        return `${displayHour}:${minutes} ${ampm}`;
+                                      })()}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                              {dayLeaves.map((leave, idx) => (
+                                <div key={idx} className="border-l-2 border-green-500 pl-3 py-1">
+                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 mb-1">
+                                    Approved Leave
+                                  </Badge>
+                                  <p className="text-sm font-medium">{leave.employeeName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {leave.leaveType} - {leave.leaveReason}
+                                  </p>
+                                  {leave.reviewedAt && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Approved: {new Date(leave.reviewedAt).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit"
+                                      })}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                              {dayPendingLeaves.map((leave, idx) => (
+                                <div key={`pending-${idx}`} className="border-l-2 border-red-500 pl-3 py-1">
+                                  <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200 mb-1">
+                                    Pending Leave
+                                  </Badge>
+                                  <p className="text-sm font-medium">{leave.employeeName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {leave.leaveType}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {new Date(leave.startDate).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric"
+                                    })} - {new Date(leave.endDate).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric"
+                                    })}
+                                  </p>
+                                  {leave.leaveReason && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {leave.leaveReason}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
                     );
                   })}
                 </div>
@@ -409,64 +682,120 @@ const EmployeeDashboard = () => {
         </Card>
       </div>
 
-      {/* Leave Request Dialog */}
-      <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* QR Code Dialog */}
+      <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+        <DialogContent className="max-w-md w-full">
+          <DialogTitle className="text-lg font-semibold text-center">
+            My Attendance QR Code
+          </DialogTitle>
+          <div className="flex flex-col items-center space-y-4 py-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Show this QR code to the guard to record your attendance
+            </p>
+            {employee?.qrCodeData ? (
+              <div className="bg-white p-6 rounded-lg">
+                <QRCodeSVG value={employee.qrCodeData} size={256} level="H" />
+              </div>
+            ) : (
+              <div className="bg-muted p-6 rounded-lg">
+                <p className="text-sm text-muted-foreground">QR code not available</p>
+              </div>
+            )}
+            <div className="text-center">
+              <p className="text-sm font-medium">{employee?.fullName}</p>
+              <p className="text-xs text-muted-foreground">{employee?.employeeId}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Filing Dialog */}
+      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>File a Leave Request</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5" />
+              File Leave Request
+            </DialogTitle>
             <DialogDescription>
-              Submit a leave request for {selectedDateForLeave ? 
-                new Date(currentYear, currentMonth, selectedDateForLeave).toLocaleDateString() 
-                : "the selected date"}
+              Submit a leave request for approval by your department head and admin.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <form onSubmit={handleLeaveSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="leaveType">Leave Type</Label>
-              <Select value={leaveType} onValueChange={setLeaveType}>
-                <SelectTrigger id="leaveType">
-                  <SelectValue />
+              <label className="text-sm font-medium">Leave Type</label>
+              <Select
+                value={leaveForm.leaveType}
+                onValueChange={(value) =>
+                  setLeaveForm((prev) => ({ ...prev, leaveType: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sick">Sick Leave</SelectItem>
-                  <SelectItem value="vacation">Vacation Leave</SelectItem>
-                  <SelectItem value="personal">Personal Leave</SelectItem>
-                  <SelectItem value="bereavement">Bereavement Leave</SelectItem>
-                  <SelectItem value="emergency">Emergency Leave</SelectItem>
+                  <SelectItem value="vacation">Vacation</SelectItem>
+                  <SelectItem value="sick">Sick</SelectItem>
+                  <SelectItem value="emergency">Emergency</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start Date</label>
+                <Input
+                  type="date"
+                  required
+                  value={leaveForm.startDate}
+                  onChange={(e) =>
+                    setLeaveForm((prev) => ({ ...prev, startDate: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">End Date</label>
+                <Input
+                  type="date"
+                  required
+                  value={leaveForm.endDate}
+                  onChange={(e) =>
+                    setLeaveForm((prev) => ({ ...prev, endDate: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="leaveReason">Reason (Optional)</Label>
+              <label className="text-sm font-medium">Reason</label>
               <Textarea
-                id="leaveReason"
-                placeholder="Please provide a reason for your leave request..."
-                value={leaveReason}
-                onChange={(e) => setLeaveReason(e.target.value)}
                 rows={3}
+                placeholder="Provide details for your leave request"
+                required
+                minLength={5}
+                value={leaveForm.reason}
+                onChange={(e) =>
+                  setLeaveForm((prev) => ({ ...prev, reason: e.target.value }))
+                }
               />
             </div>
-            <div className="flex justify-end gap-2 pt-4">
+
+            <DialogFooter className="gap-2">
               <Button
+                type="button"
                 variant="outline"
-                onClick={() => {
-                  setLeaveDialogOpen(false);
-                  setSelectedDateForLeave(null);
-                  setLeaveType("sick");
-                  setLeaveReason("");
-                }}
-                disabled={isFilingLeave}
+                onClick={() => setShowLeaveDialog(false)}
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleFileLeave}
-                disabled={isFilingLeave}
-              >
-                {isFilingLeave ? "Filing..." : "File Leave"}
+              <Button type="submit" disabled={isSubmittingLeave}>
+                {isSubmittingLeave ? "Submitting..." : "Submit Leave Request"}
               </Button>
-            </div>
-          </div>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </DashboardLayoutNew>

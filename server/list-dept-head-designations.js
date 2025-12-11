@@ -10,12 +10,12 @@ const {
 } = process.env;
 
 const departmentHeads = [
-  { empId: '25-GPC-00001', name: 'POLINNE MARI MONTEMAYR RABINA', department: 'Administration Department' },
-  { empId: '25-GPC-00002', name: 'STEPHANY MONTES OCHAVE', department: 'College Department' },
-  { empId: '25-GPC-00004', name: 'MIAH CLAIRE SAGUN CORPUZ', department: 'Elementary Department' },
-  { empId: '25-GPC-00007', name: 'FELIPE DON MARTES', department: 'Executive & Directors' },
-  { empId: '25-GPC-00006', name: 'GOMEZ BASTA BAHAGHARI', department: 'Finance Departmet' },
-  { empId: '25-GPC-00003', name: 'MIA MYCA NAUNGAYAN TRESENIO', department: 'High School Department' },
+  { empId: '25-GPC-11001', name: 'POLINNE MARI MONTEMAYR RABINA', department: 'Administration Department' },
+  { empId: '25-GPC-11002', name: 'STEPHANY MONTES OCHAVE', department: 'College Department' },
+  { empId: '25-GPC-11003', name: 'MIAH CLAIRE SAGUN CORPUZ', department: 'Elementary Department' },
+  { empId: '25-GPC-11004', name: 'FELIPE DON MARTES', department: 'Executive & Directors' },
+  { empId: '25-GPC-11005', name: 'GOMEZ BASTA BAHAGHARI', department: 'Finance Departmet' },
+  { empId: '25-GPC-11006', name: 'MIA MYCA NAUNGAYAN TRESENIO', department: 'High School Department' },
 ];
 
 (async () => {

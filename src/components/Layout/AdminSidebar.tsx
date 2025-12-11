@@ -79,6 +79,7 @@ export function AdminSidebar() {
                            (user.position.toLowerCase().includes("head") || 
                             user.position.toLowerCase().includes("dean") || 
                             user.position.toLowerCase().includes("principal"));
+                            
 
   const toggleGroup = useCallback((group: string) => {
     setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));

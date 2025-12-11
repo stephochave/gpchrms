@@ -74,7 +74,7 @@ export const generateCertificateOfEmployment = (employee: Employee): string => {
     <div class="header">
       <h1>THE GREAT PLEBEIAN COLLEGE</h1>
       <p>Gen. Montemayor St, Poblacion, Alaminos City, Pangasinan, Philippines</p>
-      <p>Email: info@gpcc.edu.ph | Tel: (048) 123-4567</p>
+      <p>Email: info@gpc.edu | Tel: (048) 123-4567</p>
     </div>
 
     <h2 style="margin-top: 16px; letter-spacing: 1px;">CERTIFICATE OF EMPLOYMENT</h2>

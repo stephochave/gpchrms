@@ -181,22 +181,19 @@ router.post('/', async (req, res) => {
     checkIn,
     checkOut,
     status,
-    notes,
-    checkInImage,
-    checkOutImage,
+    notes
   } = parseResult.data;
 
   try {
     const [result] = await pool.execute(
       `INSERT INTO attendance 
        (employee_id, employee_name, date, check_in, check_out, status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          check_in = COALESCE(VALUES(check_in), check_in),
          check_out = COALESCE(VALUES(check_out), check_out),
          status = VALUES(status),
          notes = COALESCE(VALUES(notes), notes),
-
          updated_at = CURRENT_TIMESTAMP`,
       [
         employeeId,
@@ -206,8 +203,6 @@ router.post('/', async (req, res) => {
         checkOut || null,
         status,
         notes || null,
-        checkInImage || null,
-        checkOutImage || null,
       ],
     );
 

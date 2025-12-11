@@ -75,6 +75,7 @@ const mapLeaveRow = (row: DbLeaveRequest) => ({
   leaveType: row.leave_type,
   startDate: row.start_date,
   endDate: row.end_date,
+  totalDays: row.total_days || null,
   reason: row.reason || null,
   status: row.status,
   departmentHeadComment: row.department_head_comment || null,
@@ -82,13 +83,15 @@ const mapLeaveRow = (row: DbLeaveRequest) => ({
   departmentHeadApprovedAt: row.department_head_approved_at || null,
   adminComment: row.admin_comment || null,
   decidedBy: row.decided_by || null,
+  reviewedBy: row.reviewed_by || null,
+  reviewedAt: row.reviewed_at || null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
 // GET /leaves - list leave requests with optional filters
 router.get('/', async (req, res) => {
-  const { status, employeeId, department } = req.query;
+  const { status, employeeId, department, startDate, endDate } = req.query;
 
   try {
     await ensureLeaveTable();
@@ -110,12 +113,19 @@ router.get('/', async (req, res) => {
       params.push(department);
     }
 
+    // Add date range filtering for calendar view
+    if (startDate && typeof startDate === 'string' && endDate && typeof endDate === 'string') {
+      // Match leaves that overlap with the date range
+      conditions.push('((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?) OR (start_date <= ? AND end_date >= ?))');
+      params.push(startDate, endDate, startDate, endDate, startDate, endDate);
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [rows] = await pool.execute<DbLeaveRequest[]>(
-      `SELECT id, employee_id, employee_name, employee_department, leave_type, start_date, end_date, reason,
+      `SELECT id, employee_id, employee_name, employee_department, leave_type, start_date, end_date, total_days, reason,
               status, department_head_comment, department_head_approved_by, department_head_approved_at,
-              admin_comment, decided_by, created_at, updated_at
+              admin_comment, decided_by, reviewed_by, reviewed_at, created_at, updated_at
        FROM leave_requests
        ${whereClause}
        ORDER BY status = 'pending' DESC, status = 'department_approved' DESC, created_at DESC`,
@@ -134,9 +144,9 @@ router.get('/:id', async (req, res) => {
   try {
     await ensureLeaveTable();
     const [rows] = await pool.execute<DbLeaveRequest[]>(
-      `SELECT id, employee_id, employee_name, employee_department, leave_type, start_date, end_date, reason,
+      `SELECT id, employee_id, employee_name, employee_department, leave_type, start_date, end_date, total_days, reason,
               status, department_head_comment, department_head_approved_by, department_head_approved_at,
-              admin_comment, decided_by, created_at, updated_at
+              admin_comment, decided_by, reviewed_by, reviewed_at, created_at, updated_at
        FROM leave_requests
        WHERE id = ?`,
       [req.params.id],

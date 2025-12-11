@@ -605,12 +605,14 @@ const Leaves = () => {
               <div style="font-size: 12px; margin-top: 5px; margin-bottom: 5px;">${req.departmentHeadApprovedBy || '_________________'}</div>
               <div style="font-weight: bold; font-size: 12px;">Department Head</div>
               <div style="font-size: 11px; font-style: italic; color: #0066cc;">Recommending Approval</div>
+              ${req.departmentHeadApprovedAt ? `<div style="font-size: 10px; color: #666; margin-top: 3px;">Date: ${new Date(req.departmentHeadApprovedAt).toLocaleDateString()}</div>` : ''}
             </div>
             <div class="approval-box">
               <div class="signature-line"></div>
               <div style="font-size: 12px; margin-top: 5px; margin-bottom: 5px;">${req.decidedBy || '_________________'}</div>
               <div style="font-weight: bold; font-size: 12px;">HR Admin</div>
-              <div style="font-size: 11px; font-style: italic; color: #0066cc;">Final Approval</div>
+              <div style="font-size: 11px; font-style: italic; color: ${req.status === 'approved' ? '#008000' : '#0066cc'};">Final Approval</div>
+              ${req.status === 'approved' && req.updatedAt ? `<div style="font-size: 10px; color: #666; margin-top: 3px;">Date: ${new Date(req.updatedAt).toLocaleDateString()}</div>` : ''}
             </div>
           </div>
         </div>
@@ -937,22 +939,19 @@ const Leaves = () => {
                       </TableCell>
                       {isSystemAdmin || isDepartmentHead ? (
                         <TableCell className="text-right space-x-2">
-                          {isSystemAdmin && req.status !== "rejected" && req.status !== "approved" ? (
+                          {isSystemAdmin && req.status === "pending" ? (
+                            <div className="text-xs text-amber-600 font-medium">Awaiting dept head review</div>
+                          ) : isSystemAdmin && req.status === "department_approved" ? (
                             <>
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openDecision(req.id, "approved")}
-                                disabled={
-                                  (empStats && empStats.remaining <= 0) ||
-                                  req.status !== "department_approved"
-                                }
+                                disabled={empStats && empStats.remaining <= 0}
                                 title={
                                   empStats && empStats.remaining <= 0
                                     ? "Employee has reached leave limit"
-                                    : req.status !== "department_approved"
-                                    ? "Waiting for department head recommendation"
-                                    : ""
+                                    : "Approve leave request"
                                 }
                               >
                                 Approve
@@ -961,12 +960,6 @@ const Leaves = () => {
                                 variant="destructive"
                                 size="sm"
                                 onClick={() => openDecision(req.id, "rejected")}
-                                disabled={req.status !== "department_approved"}
-                                title={
-                                  req.status !== "department_approved"
-                                    ? "Waiting for department head recommendation"
-                                    : ""
-                                }
                               >
                                 Reject
                               </Button>
@@ -981,6 +974,8 @@ const Leaves = () => {
                               <Printer className="h-4 w-4" />
                               Print Slip
                             </Button>
+                          ) : req.status === "rejected" ? (
+                            <div className="text-xs text-rose-600 font-medium">Rejected</div>
                           ) : (
                             <div className="text-sm text-muted-foreground">—</div>
                           )}

@@ -6,7 +6,8 @@ export interface DbUser extends RowDataPacket {
   email: string;
   employee_id: string | null;
   full_name: string;
-  role: 'admin' | 'employee' | 'guard';
+  // role: 'admin' | 'employee' | 'guard';
+  role: 'admin' | 'employee';
   password_hash: string;
   password_reset_required: boolean;
 }

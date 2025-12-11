@@ -17,6 +17,7 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  timezone: 'Z', // Use UTC to prevent timezone conversion for DATE fields
 });
 
 // Test database connection on startup

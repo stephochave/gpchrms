@@ -20,10 +20,10 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const isDepartmentHead =
     user?.role === 'admin' &&
     user?.position &&
-    ['head', 'dean', 'principal', 'chairman', 'president'].some((rank) =>
-      user.position.toLowerCase().includes(rank)
+    ['head', 'dean', 'principal'].some((keyword) =>
+      user.position.toLowerCase().includes(keyword)
     );
-
+    console.log('isDepartmentHead:', isDepartmentHead);
   // ----- Guard role detection by position/designation -----
   const isGuard = user?.position?.toLowerCase().includes('security guard');
 

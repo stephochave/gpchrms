@@ -22,9 +22,9 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Award, Check, Printer, Trash2, Download } from "lucide-react";
+import { Award, Check, Printer, Trash2, Download, Eye, FileEdit } from "lucide-react";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
 interface EligibleEmployee {
   id: string;
@@ -64,6 +64,8 @@ const Loyalty = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<EligibleEmployee | null>(null);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [previewAward, setPreviewAward] = useState<LoyaltyAward | null>(null);
+  const [showCertificate, setShowCertificate] = useState(false);
 
   const isAdmin = user?.role === "admin";
 
@@ -147,6 +149,24 @@ const Loyalty = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate award");
 
+      const now = new Date();
+      const newAward: LoyaltyAward = {
+        id: String(data.id || Date.now()),
+        employeeId: selectedEmployee.employeeId,
+        employeeName: selectedEmployee.fullName,
+        department: selectedEmployee.department,
+        position: selectedEmployee.position,
+        yearsOfService: selectedEmployee.yearsOfService,
+        awardYear: now.getFullYear(),
+        awardDate: now.toISOString(),
+        certificateNumber: data.certificateNumber,
+        status: "pending",
+        generatedBy: user?.fullName || "System",
+        generatedAt: now.toISOString(),
+        approvedBy: null,
+        approvedAt: null,
+      };
+
       toast({
         title: "Award Generated",
         description: `Loyalty award generated. Certificate: ${data.certificateNumber}`,
@@ -155,6 +175,7 @@ const Loyalty = () => {
       setShowGenerateDialog(false);
       setSelectedEmployee(null);
       loadData();
+      openCertificatePreview(newAward);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -225,6 +246,32 @@ const Loyalty = () => {
         description: error.message || "Failed to print certificate.",
       });
     }
+  };
+
+  const openCertificatePreview = (award: LoyaltyAward) => {
+    setPreviewAward(award);
+    setShowCertificate(true);
+  };
+
+  const downloadCertificate = (award: LoyaltyAward, filename: string, mimeType: string) => {
+    const html = generateCertificateHTML(award);
+    const blob = new Blob([html], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadAward = (award: LoyaltyAward) => {
+    const safeName = `${award.employeeName}`.replace(/\s+/g, "-").toLowerCase();
+    downloadCertificate(award, `loyalty-certificate-${safeName}-${award.awardYear}.html`, "text/html");
+  };
+
+  const handleExportEditable = (award: LoyaltyAward) => {
+    const safeName = `${award.employeeName}`.replace(/\s+/g, "-").toLowerCase();
+    downloadCertificate(award, `loyalty-certificate-${safeName}-${award.awardYear}.doc`, "application/msword");
   };
 
   const handleDeleteAward = async (awardId: string) => {
@@ -625,6 +672,15 @@ const Loyalty = () => {
                               Print
                             </Button>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openCertificatePreview(award)}
+                            className="gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            View
+                          </Button>
                           {isAdmin && (
                             <Button
                               variant="outline"
@@ -691,6 +747,69 @@ const Loyalty = () => {
                 {isGenerating ? "Generating..." : "Generate Award"}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showCertificate} onOpenChange={setShowCertificate}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>Loyalty Certificate Preview</DialogTitle>
+              <DialogDescription>
+                View, print, or download the generated loyalty certificate.
+              </DialogDescription>
+            </DialogHeader>
+
+            {previewAward && (
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-base font-semibold">{previewAward.employeeName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {previewAward.employeeId} • {previewAward.department} • {previewAward.position}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Certificate: {previewAward.certificateNumber}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePrintAward(previewAward)}
+                      className="gap-1"
+                    >
+                      <Printer className="h-3 w-3" />
+                      Print
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownloadAward(previewAward)}
+                      className="gap-1"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleExportEditable(previewAward)}
+                      className="gap-1"
+                    >
+                      <FileEdit className="h-3 w-3" />
+                      Export Editable
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="h-[70vh] overflow-auto rounded-lg border bg-white p-4">
+                  <div
+                    className="min-h-full"
+                    dangerouslySetInnerHTML={{ __html: generateCertificateHTML(previewAward) }}
+                  />
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>

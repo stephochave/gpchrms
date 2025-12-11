@@ -1,4 +1,4 @@
-import { useState,useEffect } from 'react';
+import { useState,useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
 import { QRScanner } from '@/components/QRScanner';
@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, XCircle, Clock, LogOut, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, LogOut, RefreshCw, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { apiFetch } from '@/lib/fetch';
+import jsQR from 'jsqr';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -45,6 +46,8 @@ export default function GuardDashboard() {
     }, [scanHistory]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanMode, setScanMode] = useState<'checkIn' | 'checkOut' | null>(null);
+  const [uploadMode, setUploadMode] = useState<'checkIn' | 'checkOut' | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(format(new Date(), "HH:mm:ss"));
@@ -62,6 +65,112 @@ export default function GuardDashboard() {
     setIsProcessing(true);
     const scanTime = new Date();
     try {
+      await processQRCode(qrToken, scanMode, scanTime);
+      setScanMode(null);
+    } catch (error: any) {
+      const errorResult: ScanResult = {
+        employeeId: '',
+        employeeName: 'Unknown',
+        department: '',
+        position: '',
+        timestamp: scanTime,
+        status: 'error',
+        message: error.message || 'QR scan failed',
+      };
+      setScanHistory(prev => [errorResult, ...prev.slice(0, 19)]);
+      toast({
+        title: 'Scan Failed',
+        description: error.message || 'Unable to process QR code',
+        variant: 'destructive',
+        duration: 4000,
+      });
+      setIsProcessing(false);
+      setScanMode(null);
+    }
+  };
+
+
+  const handleUploadQR = (mode: 'checkIn' | 'checkOut') => {
+    setUploadMode(mode);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !uploadMode) return;
+
+    setIsProcessing(true);
+    const scanTime = new Date();
+
+    try {
+      // Read the image file
+      const image = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        image.onload = async () => {
+          // Create canvas to read image data
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          if (!context) {
+            throw new Error('Could not get canvas context');
+          }
+
+          canvas.width = image.width;
+          canvas.height = image.height;
+          context.drawImage(image, 0, 0);
+
+          // Get image data and decode QR
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+          if (!code) {
+            throw new Error('No QR code found in image');
+          }
+
+          // Process the QR code using existing handler
+          await processQRCode(code.data, uploadMode, scanTime);
+          setUploadMode(null);
+          
+          // Reset file input
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        };
+
+        image.src = e.target?.result as string;
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error: any) {
+      const errorResult: ScanResult = {
+        employeeId: '',
+        employeeName: 'Unknown',
+        department: '',
+        position: '',
+        timestamp: scanTime,
+        status: 'error',
+        message: error.message || 'Failed to process QR image',
+      };
+      setScanHistory(prev => [errorResult, ...prev.slice(0, 19)]);
+      toast({
+        title: 'Upload Failed',
+        description: error.message || 'Unable to process QR code from image',
+        variant: 'destructive',
+        duration: 4000,
+      });
+      setIsProcessing(false);
+      setUploadMode(null);
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const processQRCode = async (qrToken: string, mode: 'checkIn' | 'checkOut', scanTime: Date) => {
+    try {
       // Verify QR code
       const verifyResponse = await apiFetch(`${API_BASE_URL}/attendance/verify-qr`, {
         method: 'POST',
@@ -70,6 +179,18 @@ export default function GuardDashboard() {
       });
       const verifyData = await verifyResponse.json();
       if (!verifyResponse.ok) {
+        // Employee not found or QR invalid
+        const errorResult: ScanResult = {
+          employeeId: 'Unknown',
+          employeeName: 'Unknown Employee',
+          department: 'Unknown',
+          position: 'Unknown',
+          scanmode: mode,
+          timestamp: scanTime,
+          status: 'error',
+          message: verifyData.message || 'Employee not recognized or deleted',
+        };
+        setScanHistory(prev => [errorResult, ...prev.slice(0, 19)]);
         throw new Error(verifyData.message || 'QR verification failed');
       }
       // Mark attendance for selected mode
@@ -84,8 +205,8 @@ export default function GuardDashboard() {
         verificationMethod: 'guard_qr',
         notes: 'Scanned by guard',
       };
-      if (scanMode === 'checkIn') body.checkIn = currentTime;
-      if (scanMode === 'checkOut') body.checkOut = currentTime;
+      if (mode === 'checkIn') body.checkIn = currentTime;
+      if (mode === 'checkOut') body.checkOut = currentTime;
       const attendanceResponse = await apiFetch(`${API_BASE_URL}/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,45 +222,22 @@ export default function GuardDashboard() {
         employeeName: verifyData.employee.employeeName,
         department: verifyData.employee.department,
         position: verifyData.employee.position,
-        scanmode: scanMode,
+        scanmode: mode,
         timestamp: scanTime,
         status: 'success',
       };
-      setScanHistory(prev => {
-        const updated = [scanResult, ...prev.slice(0, 19)];
-        return updated;
-      });
+      setScanHistory(prev => [scanResult, ...prev.slice(0, 19)]);
       toast({
         title: 'Attendance Recorded',
-        description: `${verifyData.employee.employeeName} ${scanMode === 'checkIn' ? 'checked in' : 'checked out'} successfully at ${currentTime}`,
+        description: `${verifyData.employee.employeeName} ${mode === 'checkIn' ? 'checked in' : 'checked out'} successfully at ${format(scanTime, 'HH:mm')}`,
         duration: 3000,
       });
     } catch (error: any) {
-      const errorResult: ScanResult = {
-        employeeId: '',
-        employeeName: 'Unknown',
-        department: '',
-        position: '',
-        timestamp: scanTime,
-        status: 'error',
-        message: error.message || 'QR scan failed',
-      };
-      setScanHistory(prev => {
-        const updated = [errorResult, ...prev.slice(0, 19)];
-        return updated;
-      });
-      toast({
-        title: 'Scan Failed',
-        description: error.message || 'Unable to process QR code',
-        variant: 'destructive',
-        duration: 4000,
-      });
+      throw error;
     } finally {
       setIsProcessing(false);
-      setScanMode(null);
     }
   };
-
 
   const handleLogout = () => {
     localStorage.removeItem('hrms_token');
@@ -218,19 +316,33 @@ export default function GuardDashboard() {
           </Card> 
         </div>
         {/* Scan Mode Buttons */}
-        <div className="flex gap-4 mb-6">
-          <Button size="lg" onClick={() => setScanMode('checkIn')} disabled={isProcessing}>
-            Start Scanning for Check-in
-          </Button>
-          <Button size="lg" variant="outline" onClick={() => setScanMode('checkOut')} disabled={isProcessing}>
-            Start Scanning for Check-out
-          </Button>
-          {scanMode && (
-            <Button size="lg" variant="secondary" onClick={() => setScanMode(null)} disabled={isProcessing}>
+        {!scanMode ? (
+          <div className="flex gap-4 mb-6 flex-wrap">
+            <Button size="lg" onClick={() => setScanMode('checkIn')} disabled={isProcessing}>
+              Start Scanning for Check-in
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => setScanMode('checkOut')} disabled={isProcessing}>
+              Start Scanning for Check-out
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-4 mb-6 flex-wrap">
+            <Button size="lg" variant="secondary" onClick={() => handleUploadQR(scanMode)} disabled={isProcessing}>
+              <Upload className="h-4 w-4 mr-2" />
+              Upload QR for {scanMode === 'checkIn' ? 'Check-in' : 'Check-out'}
+            </Button>
+            <Button size="lg" variant="destructive" onClick={() => setScanMode(null)} disabled={isProcessing}>
               Cancel Scanning
             </Button>
-          )}
-        </div>
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
         <div className="container mx-auto py-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* QR Scanner (show when scanMode is active, allow switching) */}

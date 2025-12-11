@@ -25,7 +25,7 @@ const DashboardLayoutNew = ({ children }: DashboardLayoutNewProps) => {
                   <h2 className="text-lg font-semibold text-foreground">
                     {user?.fullName}
                   </h2>
-                  <p className="text-sm text-muted-foreground capitalize">
+                  <p className="text-sm text-muted-foreground">
                     {user?.role}
                   </p>
                 </div>

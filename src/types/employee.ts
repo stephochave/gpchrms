@@ -18,7 +18,7 @@ export interface Employee {
   dateHired: string;
   dateOfLeaving?: string;
   employmentType?: string;
-  role?: string;
+  role: string;
   sssNumber?: string;
   pagibigNumber?: string;
   tinNumber?: string;

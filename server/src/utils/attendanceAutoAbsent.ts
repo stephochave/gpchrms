@@ -102,7 +102,7 @@ export const autoMarkAbsentForToday = async () => {
 
     // Insert absent records in a single bulk INSERT
     const valuesPlaceholders = employeesToMarkAbsent
-      .map(() => "(?, ?, ?, NULL, NULL, 'absent', ?, NULL, NULL)")
+      .map(() => "(?, ?, ?, NULL, NULL, 'absent', ?)")
       .join(", ");
 
     const params: any[] = [];

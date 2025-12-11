@@ -73,7 +73,7 @@ const Profile = () => {
       department: employeeData?.department || "Human Resources",
       position: employeeData?.position || "Staff",
       designation: employeeData?.position || "Staff",
-      email: employeeData?.email || user?.email || "sample@gpc.edu.ph",
+      email: employeeData?.email || user?.email || "sample@gpc.edu",
       phone: employeeData?.phone || "N/A",
       dateOfBirth: employeeData?.dateOfBirth || "1990-01-01",
       address: employeeData?.address || "San Vicente, Palawan",
