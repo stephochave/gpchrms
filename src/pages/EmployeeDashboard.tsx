@@ -35,7 +35,7 @@ import { apiFetch } from "@/lib/fetch";
 
 import { QRCodeSVG } from "qrcode.react";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
 interface Employee {
   id: string;
@@ -116,6 +116,15 @@ const EmployeeDashboard = () => {
   ];
 
   useEffect(() => {
+    console.log('EmployeeDashboard - user:', user);
+    console.log('EmployeeDashboard - user.employeeId:', user?.employeeId);
+    
+    if (!user) {
+      console.log('EmployeeDashboard - No user, setting isLoading to false');
+      setIsLoading(false);
+      return;
+    }
+    
     void fetchEmployeeData();
     void fetchTodayAttendance();
     void fetchCalendarEvents();
@@ -138,7 +147,11 @@ const EmployeeDashboard = () => {
   }, [currentMonth, currentYear]);
 
   const fetchEmployeeData = async () => {
-    if (!user?.employeeId) return;
+    if (!user?.employeeId) {
+      console.log('EmployeeDashboard - No employeeId, setting loading to false');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // First, search by employeeId to get the full employee record

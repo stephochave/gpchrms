@@ -79,7 +79,10 @@ export function AdminSidebar() {
                            (user.position.toLowerCase().includes("head") || 
                             user.position.toLowerCase().includes("dean") || 
                             user.position.toLowerCase().includes("principal"));
-                            
+  
+  // Detect guard users - Security Department with Security Guard position
+  const isGuard = user?.department?.toLowerCase().includes('security') && 
+                  user?.position?.toLowerCase().includes('security guard');
 
   const toggleGroup = useCallback((group: string) => {
     setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -171,7 +174,8 @@ export function AdminSidebar() {
             active: location.pathname === "/employee/leaves" && location.search.includes("view=department"),
           }
         );
-      } else {
+      } else if (!isGuard) {
+        // Regular employees get leaves menu (guards don't need it)
         baseItems.push({
           id: "leaves",
           label: "Leaves",
@@ -181,15 +185,29 @@ export function AdminSidebar() {
         });
       }
 
-      // Add remaining items
-      baseItems.push(
-        {
+      // Add Guard Attendance Station for guards
+      if (isGuard) {
+        baseItems.push({
+          id: "guard-station",
+          label: "Guard Attendance Station",
+          icon: QrCode,
+          onClick: () => navigate("/guard/dashboard"),
+          active: location.pathname === "/guard/dashboard",
+        });
+      }
+
+      // Add remaining items (except loyalty for guards)
+      if (!isGuard) {
+        baseItems.push({
           id: "loyalty",
           label: "Loyalty Awards",
           icon: Award,
           onClick: () => navigate("/loyalty"),
           active: location.pathname.startsWith("/loyalty"),
-        },
+        });
+      }
+      
+      baseItems.push(
         {
           id: "profile",
           label: "Profile",
@@ -208,7 +226,7 @@ export function AdminSidebar() {
 
       return baseItems;
     },
-    [location.pathname, location.search, navigate, user?.position]
+    [location.pathname, location.search, navigate, user?.position, user?.department, isGuard]
   );
 
   return (

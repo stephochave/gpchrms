@@ -86,9 +86,8 @@ const Login = () => {
       let targetRoute = '/employee/dashboard';
       if (result.user?.role === 'admin') {
         targetRoute = '/dashboard';
-      } else if (result.user?.role === 'guard') {
-        targetRoute = '/guard/dashboard';
       }
+      // Employees (including security guards) go to employee dashboard
       
       toast({
         title: "Login Successful",

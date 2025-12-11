@@ -24,8 +24,9 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
       user.position.toLowerCase().includes(keyword)
     );
     console.log('isDepartmentHead:', isDepartmentHead);
-  // ----- Guard role detection by position/designation -----
-  const isGuard = user?.position?.toLowerCase().includes('security guard');
+  // ----- Guard role detection - Security Department with Security Guard position -----
+  const isGuard = user?.department?.toLowerCase().includes('security') && 
+                  user?.position?.toLowerCase().includes('security guard');
 
   // ----- Status validation -----
   React.useEffect(() => {
