@@ -23,19 +23,58 @@ Employee ID: 25-GPC-ADM01
 Email: admin@greatplebeian.edu
 Password: Admin@123456
 
-High Level Access
+High Level Access:
+    Add Edit Delete Employees
+    Generate QR Codes
+    Add Edit Delete Department / Designation
+    Generate Report / Add Attendance
+    Await dept head leave request approve / Leave Report
+    Upload Add Edit Delete Employee Documents
+    Generate Approve Print View Delete   Loyalty Awards 
+
 ```
 ### Head/Dean with admin role
 ```
-Employee ID: 214-GPC-00003
+Employee ID: 14-GPC-00003
 Email: 14-GPC-00003@school.edu
 Password: 14-GPC-00003
+
+Mid Level Access:
+    Dashboard: Show QR Code to Guard
+    Department: Show View / Add only Designation 
+    Attendance: Generate Report / Add Attendance / Attendance Report
+    Leave Request: File a Leave / Review their Department Leave Request first before admin / Leave Report
+    Documents: View Edit Documents 
+    Loyalty Awards: Generate / Approve / Print / View / Delete
+    Profile: Edit their own Profile / Documents / Show QR Codes
 ```
 ### Employee
 ```
-25-GPC-00005
-carlos.torres@gpc.edu
-Employee@12
+Name: Carlos Mendoza Torres
+Department: Marketing 
+Position: Marketing Specialist
+Role: Employee
+Employee ID: 25-GPC-00005
+Email: carlos.torres@gpc.edu
+Password: Employee@12
+
+Name: MIAH SAGUN CORPUZ
+Department: College Department
+Position/Designation: Assistant Librarian
+Role: Employee
+Employee ID: 25-GPC-00010
+Email: 25-GPC-00010@gpc.edu
+Password: 25-GPC-00010
+
+
+
+Low Level Access: 
+    Dashboard: Show QR Code to Guard / Calendar: File a Leave, Show Events  
+    Attendance: My Attendance Records   
+    Leave: File a Leave / My Leave Requests
+    Loyalty Awards: Show own Loyalty Awards
+    Profile: Edit their own Profile / Documents / Show QR Codes
 ```
+
 #
 
