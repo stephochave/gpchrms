@@ -24,6 +24,7 @@ Email: admin@greatplebeian.edu
 Password: Admin@123456
 
 High Level Access:
+    Dashboard: Employee, Attendance, Documents, Organization, Absent / Calendar: Add Schedule Event, View Approve Leave   
     Add Edit Delete Employees
     Generate QR Codes
     Add Edit Delete Department / Designation
@@ -35,9 +36,22 @@ High Level Access:
 ```
 ### Head/Dean with admin role
 ```
+Name: Rosa Garcia Fernandez
+Department: College Department
+Position/Designation: Dean of College of Business Education
+Role: Admin
 Employee ID: 14-GPC-00003
 Email: 14-GPC-00003@school.edu
 Password: 14-GPC-00003
+
+
+Name: Juan Dela Cruz
+Department: Elementary Department
+Position/Designation: Elementary Principal
+Role: Admin
+Employee ID: 12-GPC-00002
+Email: 12-GPC-00002@gpc.edu
+Password: 12-GPC-00002
 
 Mid Level Access:
     Dashboard: Show QR Code to Guard
@@ -50,6 +64,7 @@ Mid Level Access:
 ```
 ### Employee
 ```
+
 Name: Carlos Mendoza Torres
 Department: Marketing 
 Position: Marketing Specialist
@@ -58,6 +73,7 @@ Employee ID: 25-GPC-00005
 Email: carlos.torres@gpc.edu
 Password: Employee@12
 
+For Testing Approve Leave Request Approve before admin
 Name: MIAH SAGUN CORPUZ
 Department: College Department
 Position/Designation: Assistant Librarian
@@ -66,7 +82,14 @@ Employee ID: 25-GPC-00010
 Email: 25-GPC-00010@gpc.edu
 Password: 25-GPC-00010
 
-
+For Testing Pending Leave Request
+Name: Maria Santos Lopez
+Department: Elementary Department
+Position/Designation: Elementary Faculty Member
+Role: Employee
+Employee ID: 15-GPC-00001
+Email: 15-GPC-00001@gpc.edu
+Password: 15-GPC-00001
 
 Low Level Access: 
     Dashboard: Show QR Code to Guard / Calendar: File a Leave, Show Events  
@@ -76,5 +99,7 @@ Low Level Access:
     Profile: Edit their own Profile / Documents / Show QR Codes
 ```
 
-#
+## Importing Database 
+
+
 
