@@ -37,6 +37,8 @@ High Level Access:
     Generate Approve Print View Delete   Loyalty Awards 
 
 ```
+
+
 ### Head/Dean with admin role
 ```
 Name: Rosa Garcia Fernandez
@@ -67,6 +69,16 @@ Mid Level Access:
 ```
 ### Employee
 ```
+
+For Scanning QRCodes
+Name: Security Guard
+Department:  Security
+Position: Security Guard
+Role: Guard
+Email: guard01@school.edu
+Employee ID: 25-GPC-GRD01
+Password: Guard@123456
+
 
 Name: Carlos Mendoza Torres
 Department: Marketing 
