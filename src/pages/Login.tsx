@@ -11,12 +11,12 @@ import logo from '../../images/logo.png';
 
 const Login = () => {
   const [employeeId, setEmployeeId] = useState('');
-  const [email, setEmail] = useState('');
+  // const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({
     employeeId: '',
-    email: '',
+    // email: '',
     password: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -27,7 +27,7 @@ const Login = () => {
   const validateForm = () => {
     const newErrors = {
       employeeId: '',
-      email: '',
+      // email: '',
       password: '',
     };
 
@@ -42,14 +42,14 @@ const Login = () => {
     }
 
     // Validate email if provided
-    if (email.trim()) {
-      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailPattern.test(email.trim())) {
-        newErrors.email = 'Invalid email format';
-      }
-    } else {
-      newErrors.email = 'This field is required';
-    }
+    // if (email.trim()) {
+    //   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    //   if (!emailPattern.test(email.trim())) {
+    //     newErrors.email = 'Invalid email format';
+    //   }
+    // } else {
+    //   newErrors.email = 'This field is required';
+    // }
 
     // Validate password
     if (!password.trim()) {
@@ -67,7 +67,8 @@ const Login = () => {
     if (!validateForm()) return;
 
     setSubmitting(true);
-    const result = await login(email || employeeId, password);
+    // const result = await login(email || employeeId, password);
+    const result = await login(employeeId, password);
     setSubmitting(false);
 
     if (result.success) {
@@ -111,7 +112,7 @@ const Login = () => {
     const timer = setTimeout(() => {
       setErrors({
         employeeId: '',
-        email: '',
+        // email: '',
         password: '',
       });
     }, 5000);
@@ -164,7 +165,7 @@ const Login = () => {
             )}
           </div>
 
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <Label htmlFor="email" className="text-foreground">Email</Label>
             <Input
               id="email"
@@ -187,7 +188,7 @@ const Login = () => {
                 {errors.email}
               </p>
             )}
-          </div>
+          </div> */}
 
           <div className="space-y-2">
             <Label htmlFor="password" className="text-foreground">Password</Label>
