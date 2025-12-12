@@ -35,7 +35,7 @@ import { apiFetch } from "@/lib/fetch";
 
 import { QRCodeSVG } from "qrcode.react";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 interface Employee {
   id: string;

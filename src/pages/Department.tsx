@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Search, Pencil, Trash2, Database, ListChecks } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 const DepartmentPage = () => {
   const { user } = useAuth();

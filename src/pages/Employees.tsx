@@ -378,7 +378,7 @@ const Employees = () => {
           variant: "destructive",
           title: "Server Connection Error",
           description:
-            "Unable to connect to the server. Please make sure the backend server is running on port 4000.",
+            `Unable to connect to the server. Please make sure the backend server is running on ${API_BASE_URL}.`,
         });
       } else {
         toast({
