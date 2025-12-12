@@ -20,11 +20,14 @@ node_modules
 *.njsproj
 *.sln
 *.sw?
-package-lock.json
-package-lock.json
+# package-lock.json
+# package-lock.json
 *.md
 *.ps1
 ngrok.yml
-/server/src/uploads
+
 server/fix-database-schema.sql
-.env
+# .env
+
+
+/server/src/uploads
