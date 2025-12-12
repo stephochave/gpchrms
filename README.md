@@ -4,6 +4,8 @@
 ```bash
 npm install
 npm run dev
+
+Notes: This command line displays frontend error logs. Refer here to review and diagnose any issues that occur in the frontend.
 ```
 ### Backend (Express + MySQL)
 
@@ -12,6 +14,8 @@ cd server
 npm install
 cp env.example .env
 npm run dev
+
+Notes: This command line displays backend error logs. Refer here to review and diagnose any issues that occur in the backend.
 ```
 
 ## TEST USER ACCOUNT
