@@ -121,6 +121,16 @@ Low Level Access:
     3. mysql -u root -p hrms < C:\path\gpchrms_final_database.sql
 ```
 
+### Using VSCode Command Line
+```
+    1. mysql -u root
+    2. DROP DATABASE IF EXISTS hrms;
+    3. CREATE DATABASE hrms;
+    4. use hrms;
+    5. source gpchrms_final_database.sql
+
+```
+
 
 
 
